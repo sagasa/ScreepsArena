@@ -119,6 +119,10 @@ export function trySpawnEnergyCollector(spawn){
     creep.target = findRresourcesEC(creep)
     creep.state = EC_STATE_MOVE
     creep.update = function(){
+
+        
+
+
         if(this.state == EC_STATE_MOVE&&this.target.harvestTime<20&&getTicks()%50==1)
             this.target = findRresourcesEC(this)
 

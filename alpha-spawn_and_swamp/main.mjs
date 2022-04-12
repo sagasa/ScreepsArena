@@ -641,8 +641,6 @@ export function loop() {
 
     enemySoldier = enemyCreeps.filter(creep=>creep.body.some(b=>b.type==RANGED_ATTACK||b.type==ATTACK))
     enemyWorker = enemyCreeps.filter(creep=>creep.body.some(b=>b.type!=RANGED_ATTACK&&b.type!=ATTACK))
-    enemySoldier.forEach(es=>console.log(es.id,es.myProp))
-    enemySoldier.forEach(es=>es.myProp = "Test")
 
     if(0 < enemySoldier.length){
         let near = mySpawn.findClosestByRange(enemySoldier)
