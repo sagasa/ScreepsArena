@@ -5,6 +5,15 @@ import {TOP,TOP_RIGHT,RIGHT,BOTTOM_RIGHT,BOTTOM,BOTTOM_LEFT,LEFT,TOP_LEFT} from 
 import { } from '/arena';
 import {CostMatrix,searchPath} from '/game/path-finder';
 
+export function getMin(array,func){
+	let min = null
+	array.forEach(e=>{
+		if(min==null||func(e,min)<0)
+			min = e
+	})
+    return min
+}
+
 export function canMove(pos){
     return getTerrainAt({x: pos.x, y: pos.y})!=1
 }

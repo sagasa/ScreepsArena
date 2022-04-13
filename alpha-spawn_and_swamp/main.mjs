@@ -622,6 +622,8 @@ export function init(){
 
 let ec
 
+let et
+
 export function loop() {
     if(!isInit){
         init();
@@ -673,6 +675,12 @@ export function loop() {
         ec=creeps.trySpawnEnergyCollector(mySpawnHolder)
     else
         ec.update()
+
+    if(!et)
+        et=creeps.trySpawnEnergyTransporter(mySpawnHolder)
+    else
+        et.update()
+    
 
     //エネルギー収集
     if(energy_workers.holders.length<1){

@@ -1,6 +1,6 @@
 import { } from '/game/utils';
 import {Creep} from '/game/prototypes';
-import { } from '/game/constants';
+import {ATTACK,RANGED_ATTACK,HEAL} from '/game/constants';
 import { } from '/arena';
 
 import { getObjectsByPrototype } from '/game/utils';
@@ -23,11 +23,14 @@ let worker=[]
 let soldier=[]
 
 export function update(){
+	
+	
 	creeps=getObjectsByPrototype(Creep).filter(creep=>!creep.my&&creep.hits!=null)
 	creeps.forEach(creep=>{
-		if(!creep.profiler){
+		if(!creep.profiler)
 			creep.profiler = new creep_profiler()
-		}
+		
+		
 	})
 
     attacker = creeps.filter(creep=>creep.body.some(b=>b.type==ATTACK))
