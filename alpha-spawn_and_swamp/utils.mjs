@@ -5,6 +5,57 @@ import {TOP,TOP_RIGHT,RIGHT,BOTTOM_RIGHT,BOTTOM,BOTTOM_LEFT,LEFT,TOP_LEFT} from 
 import { } from '/arena';
 import {CostMatrix,searchPath} from '/game/path-finder';
 
+//建築物と
+const matrixCommon = new CostMatrix
+
+export class spawn_holder{
+    constructor(spawn) {
+        this.spawn = spawn;
+        this.progress = null
+    }
+
+    trySpawn(body){
+        if(this.progress!=null){
+            if(this.progress.id==null||getRange(this.spawn, this.progress)==0)
+                return null
+            else
+                this.progress = null
+        }
+        let res = this.spawn.spawnCreep(body)
+        if(res.object==null)
+            return null
+        
+        this.progress = res.object
+        return this.progress
+    }
+}
+
+let spawnHolder,spawnEntries = []
+
+export function entrySpawn(body,priority,callback){
+    spawnEntries.push({body:body,priority:priority,callback:callback})
+}
+
+export function trySpawn(){
+    if(spawnEntries.length==0)return
+    if(!spawnHolder)
+        spawnHolder = new spawn_holder(getObjectsByPrototype(StructureSpawn).find(spawn=>spawn.my))
+
+    spawnEntries.sort((a,b)=>b.priority-a.priority)
+
+    const priority = spawnEntries[0].priority
+    for(const entry of spawnEntries){
+        if(entry.priority<priority)
+            break
+        const creep = spawnHolder.trySpawn(entry.body)
+        if(creep!=null){
+            entry.callback(creep)
+            break
+        }
+    }
+    spawnEntries = []
+}
+
 export function getMin(array,func){
 	let min = null
 	array.forEach(e=>{

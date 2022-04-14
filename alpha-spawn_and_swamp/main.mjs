@@ -5,12 +5,14 @@ import {TOP,TOP_RIGHT,RIGHT,BOTTOM_RIGHT,BOTTOM,BOTTOM_LEFT,LEFT,TOP_LEFT} from 
 import { } from '/arena';
 import {CostMatrix,searchPath} from '/game/path-finder';
 
-import {spawn_holder,creep_holder} from './creeps';
-import {canMove,check3x3,move,getDirection4,clamp1} from './utils';
+import {spawn_holder} from './utils';
+import {canMove,check3x3,move,getDirection4,clamp1,entrySpawn,trySpawn} from './utils';
 import * as ep from './enemies';
-import * as creeps from './creeps';
+import * as cp from './creeps';
+import * as workers from './workers';
+import * as attackers from './attackers';
 
-//import {Visual} from '/game/visual';
+
 
 class creep_manager{
     constructor(squad){
@@ -31,57 +33,17 @@ class creep_manager{
     }
 }
 
-const WORKER_STATE_BUILD = 0;
-const WORKER_STATE_TRANSFER = 1;
-const WORKER_STATE_SUPPLY = 2;
-
-class energy_collector extends creep_holder{
-
-    constructor(creep){
-        super(creep)
-        this.state = WORKER_STATE_SUPPLY
+export class creep_holder{
+    constructor(creep) {
+        this.creep = creep;
     }
-
-    findTarget(){
-        let resources=getObjectsByPrototype(StructureContainer).filter(resource=>0<resource.store.getUsedCapacity())
-        this.target = this.creep.findClosestByPath(resources)
+    canMove(){
+        return this.creep.fatigue<=0;
     }
-
-    update(){
-        if(this.creep.id==null){
-            return;
-        }
-        
-        if(this.state==WORKER_STATE_SUPPLY){
-            if(this.target==null||this.target.store==null||this.target.store.energy<=0)
-                this.findTarget();
-
-            if(this.creep.withdraw(this.target,RESOURCE_ENERGY)==ERR_NOT_IN_RANGE){
-                this.creep.moveTo(this.target);
-            }else if(this.creep.store.getFreeCapacity(RESOURCE_ENERGY)<=0){
-                this.state=WORKER_STATE_TRANSFER;
-            }
-        }else if(this.state == WORKER_STATE_TRANSFER){
-            if(this.creep.transfer(mySpawn,RESOURCE_ENERGY)==ERR_NOT_IN_RANGE){
-                this.creep.moveTo(mySpawn);
-            }else if(this.creep.store.energy<=0){
-                this.state=WORKER_STATE_SUPPLY;
-            }
-        }else if(this.state == WORKER_STATE_BUILD){
-            console.log(myConstruct)
-            if(myConstruct.length<=0)
-                this.state=WORKER_STATE_TRANSFER
-            else if(this.creep.build(myConstruct[0])==ERR_NOT_IN_RANGE){
-                this.creep.moveTo(myConstruct[0]);
-            }else{
-                if(this.creep.store.energy<=0){
-                    this.state=WORKER_STATE_SUPPLY;
-                }
-            }
-        }
+    isDead(){
+        return this.creep.hits==null;
     }
 }
-
 
 let hunterMatrix = new CostMatrix
 const MATRIX_HUNTER = {swampCost:2,costMatrix:hunterMatrix}
@@ -138,9 +100,10 @@ class hunter extends creep_holder{
 }
 
 let trySpawnHunter = function(){
-    let creep = mySpawnHolder.trySpawn([MOVE,MOVE,MOVE,MOVE,MOVE,MOVE,MOVE,MOVE,MOVE,MOVE,RANGED_ATTACK,HEAL]);
-    if(creep==null) return null
-    return new hunter(creep)
+    let creep = entrySpawn([MOVE,MOVE,MOVE,MOVE,MOVE,MOVE,MOVE,MOVE,MOVE,MOVE,RANGED_ATTACK,HEAL],5,(creep)=>{
+
+    });
+
 };
 
 const MEMBER_MODE_ATTACK = 0
@@ -330,6 +293,8 @@ class soldier_squad{
     }
 
     trySpawn(){
+        return
+
         if(this.attackers.length<SQUAD_ATTACKER_COUNT){
             let holder = trySpawnAttacker();
             if(holder!=null){
@@ -569,39 +534,28 @@ class soldier_squad{
     }
 }
 
-var isInit,mySpawn,enemySpawn;
+let isInit,mySpawn,enemySpawn;
 
-var mySpawnHolder
+let mySpawnHolder
 
-var energy_workers=new creep_manager(null)
+let energy_workers=new creep_manager(null)
 
+let energyTransporters = []
 
-var squads=[]
+let squads=[]
 
-var enemyCreeps=[]
-var enemyAttacker=[]
-var enemyRangeAttacker=[]
-var enemyWorker=[]
-var enemySoldier=[]
+let enemyCreeps=[]
+let enemyAttacker=[]
+let enemyRangeAttacker=[]
+let enemyWorker=[]
+let enemySoldier=[]
 
-var myCreeps=[]
-var myConstruct=[]
+let myCreeps=[]
+let myConstruct=[]
 
-var groupPoint;
+let groupPoint;
 
-var isLeft
-
-let trySpawnAttacker = function(){
-    let creep = mySpawnHolder.trySpawn([MOVE,ATTACK,MOVE,ATTACK,MOVE,ATTACK,MOVE,ATTACK,MOVE,ATTACK,MOVE,ATTACK,MOVE,ATTACK]);
-    if(creep==null) return null
-    return new attacker(creep)
-};
-
-let trySpawnHealer = function(){
-    let creep = mySpawnHolder.trySpawn([MOVE,MOVE,HEAL,MOVE,HEAL,HEAL]);
-    if(creep==null) return null
-    return new healer(creep)
-};
+let isLeft
 
 
 export function init(){
@@ -622,18 +576,20 @@ export function init(){
 
 let ec
 
-let et
-
 export function loop() {
     if(!isInit){
         init();
         isInit=true;
     }
 
-
-
-    creeps.update()
+    cp.update()
     ep.update()
+
+    workers.update()
+    attackers.update()
+    
+
+    
 
     enemyCreeps=getObjectsByPrototype(Creep).filter(creep=>!creep.my&&creep.hits!=null)
     myCreeps=getObjectsByPrototype(Creep).filter(creep=>creep.my)
@@ -668,27 +624,9 @@ export function loop() {
     myCreeps.forEach(c=>hunterMatrix.set(c.x,c.y,10))
 
 
-    energy_workers.update()
+   
     squads.forEach(sq=>sq.update())
-
-    if(!ec)
-        ec=creeps.trySpawnEnergyCollector(mySpawnHolder)
-    else
-        ec.update()
-
-    if(!et)
-        et=creeps.trySpawnEnergyTransporter(mySpawnHolder)
-    else
-        et.update()
     
-
-    //エネルギー収集
-    if(energy_workers.holders.length<1){
-        let creep = mySpawnHolder.trySpawn([CARRY,MOVE,CARRY,MOVE,CARRY,MOVE,CARRY,MOVE,CARRY,MOVE]);
-        if(creep!=null){
-            energy_workers.holders.push(new energy_collector(creep))
-        }
-    }
 
     squads = squads.filter(sq=>!sq.isEmpty())
     
@@ -713,4 +651,5 @@ export function loop() {
     }
     // Your code goes here
 
+    trySpawn()
 }
