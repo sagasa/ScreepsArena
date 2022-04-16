@@ -108,7 +108,7 @@ class attack_squad{
 	    this.healers = this.healers.filter(creep=>creep.hitsMax!=null)
 	    this.members = this.members.filter(creep=>creep.hitsMax!=null)
 
-	    let near = findClosestByPath(this.formation_center,ep.soldier,pathAttacker)
+	    let near = findClosestByPath(this.formation_center,ep.soldiers,pathAttacker)
 
 	    //陣形をつくるか？
 	    let assemble = near!=null&&getRange(this.formation_center,near)<10
@@ -137,13 +137,34 @@ class attack_squad{
 				const dPos = this.formation_pos[7]
 				if(2<path.length)
 					this.formation_dir = getDirection4(path[1].x-dPos.x,path[1].y-dPos.y)
+
+				const needRange = findInRange(near,ep.attackers,5).length!=0
+
+				if(needRange){
+					//1マス残す
+					if(2<getRange(path[0],near)){
+						nextCenter = path[0]
+					}
+					//下がる
+					if(getRange(path[0],near)<2){
+						let epath = findPath(this.formation_center, groupPoint,ignoreSwamp)
+						nextCenter = epath[0]
+					}
+				}else{
+					if(1<getRange(path[0],near)){
+						nextCenter = path[0]
+					}
+				}
+				
+
 			}else{
 				path = findPath(this.formation_center, near,pathAttacker)
+				nextCenter = path[0]
 			}
-			
-			
-			nextCenter = path[0]
 			console.log(path[0],path[1])
+			
+			
+			
 		}
 		let visual = new Visual(0,false)
 		if(!assemble){
@@ -381,6 +402,10 @@ export function update(){
     } 
     cp.myCreeps.forEach(creep=>{
         matrixAttacker.set(creep.x, creep.y,8)
+    })
+
+    ep.creeps.forEach(creep=>{
+        matrixAttacker.set(creep.x, creep.y,256)
     })
 
     cp.ownedStructures.forEach(os=>{
