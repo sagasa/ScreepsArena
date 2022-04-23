@@ -20,6 +20,72 @@ function init(){
     squad.formation_center = {x: mySpawn.x, y: mySpawn.y-5}
 }
 
+export function update(){
+	if(!isInit){
+        init();
+        isInit=true;
+    }
+    for(let y = 0; y < 100; y++) {
+        for(let x = 0; x < 100; x++) {
+            matrixAttacker.set(x,y,0)
+        }
+    } 
+    cp.myCreeps.forEach(creep=>{
+        matrixAttacker.set(creep.x, creep.y,8)
+    })
+
+    ep.creeps.forEach(creep=>{
+        matrixAttacker.set(creep.x, creep.y,256)
+    })
+
+    cp.ownedStructures.forEach(os=>{
+    	if(!(os instanceof StructureContainer)){
+        	matrixAttacker.set(os.x, os.y,256)
+        }
+    })
+
+    if(hound)
+    	hound.update()
+    else
+    	trySpawnHound(5,creep=>hound=creep)
+
+    return
+
+    squad.update()
+    squad.trySpawn()
+
+    return
+}
+let hound
+export function trySpawnHound(priority,callback){
+	entrySpawn([MOVE,MOVE,MOVE,MOVE,MOVE,MOVE,MOVE,MOVE,MOVE,MOVE,RANGED_ATTACK,HEAL],priority,creep=>{
+
+		creep.update = function(){
+
+			this.moveTo({x:50,y:50})
+			
+			const near = this.findClosestByRange(ep.creeps)
+
+			
+			
+			this.heal(this)
+			this.autoAttack(near)
+	    }
+
+	    creep.autoAttack = function(target){
+	    	if(target==null)
+	    		return false
+	    	if(getRange(target,this)<=1){
+	    		this.rangedMassAttack()
+	    		return true
+	    	}
+	    	return this.rangedAttack(target)==0
+	    }
+		callback(creep)
+	})
+}
+
+
 const d2p = [{x:2,y:0,transpose:false},{x:0,y:2,transpose:true},{x:-2,y:0,transpose:false},{x:0,y:-2,transpose:true}]
 
 const attackerIndexes = [{priority:5,indexes:[1,2,3]}]
@@ -390,35 +456,7 @@ function canMove(pos){
 	return getTerrainAt({x: pos.x, y: pos.y})!=1&&matrixAttacker.get(pos.x,pos.y)<100
 }
 
-export function update(){
-	if(!isInit){
-        init();
-        isInit=true;
-    }
-    for(let y = 0; y < 100; y++) {
-        for(let x = 0; x < 100; x++) {
-            matrixAttacker.set(x,y,0)
-        }
-    } 
-    cp.myCreeps.forEach(creep=>{
-        matrixAttacker.set(creep.x, creep.y,8)
-    })
 
-    ep.creeps.forEach(creep=>{
-        matrixAttacker.set(creep.x, creep.y,256)
-    })
-
-    cp.ownedStructures.forEach(os=>{
-    	if(!(os instanceof StructureContainer)){
-        	matrixAttacker.set(os.x, os.y,256)
-        }
-    })
-
-    squad.update()
-    squad.trySpawn()
-
-    return
-}
 
 export function trySpawnHealer(priority,callback){
 	entrySpawn([MOVE,MOVE,HEAL,MOVE,HEAL,HEAL],priority,creep=>{

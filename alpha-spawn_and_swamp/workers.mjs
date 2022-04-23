@@ -79,18 +79,18 @@ export function update(){
         matrixWorker.set(cs.x, cs.y, 20)
     })
     
-
-    energyCollectors = energyCollectors.filter(creep=>creep.hitsMax)
-    energyCollectors.forEach(et=>et.update())
-    if(energyCollectors.length<1){
-        const priority = 5
-        trySpawnEnergyCollector(priority,(creep)=>energyCollectors.push(creep))
-    }
     energyTransporters = energyTransporters.filter(creep=>creep.hitsMax)
     energyTransporters.forEach(et=>et.update())
     if(energyTransporters.length<2){
         const priority = energyTransporters.length<=2 ? 10 : 3
         trySpawnEnergyTransporter(priority,(creep)=>energyTransporters.push(creep))
+    }
+
+    energyCollectors = energyCollectors.filter(creep=>creep.hitsMax)
+    energyCollectors.forEach(et=>et.update())
+    if(energyCollectors.length<0){
+        const priority = 5
+        trySpawnEnergyCollector(priority,(creep)=>energyCollectors.push(creep))
     }
 }
 

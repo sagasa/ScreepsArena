@@ -13,9 +13,10 @@ class creep_profiler{
 		let moveCount = creep.body.filter(b=>b.type==MOVE).length
 		let otherCount = creep.body.filter(b=>b.type!=MOVE&&b.type!=CARRY).length
 
-		console.log(moveCount,otherCount)
-		this.moveTickSwamp
-		this.moveTickPlane
+		this.moveTickSwamp = Math.ceil(otherCount/moveCount*5)
+		this.moveTickPlane = Math.ceil(otherCount/moveCount)
+
+		console.log(this.moveTickSwamp,this.moveTickPlane)
 		this.weight
 	}
 	update(creep){
@@ -37,9 +38,39 @@ export let workers=[]
 export let transporters=[]
 export let soldiers=[]
 
-export function update(){
-	
+let isInit,sideLeft
+
+export let centerArea,enemySpawnArea,mySpawnArea
+
+function rect(x,y,w,h){
+	const rect = {x:x,y:y,w:w,h:h}
+	rect.contain = function(pos){
+
+	}
+	return rect
+}
+
+function init(){
 	spawn = getObjectsByPrototype(StructureSpawn).find(spawn=>!spawn.my)
+	sideLeft = spawn.x<50
+
+	centerArea = rect(14,0,71,99)
+	if(sideLeft){
+		enemySpawnArea = rect(0,19,13,61)
+		mySpawnArea = rect(86,19,13,61)
+	}else{
+		mySpawnArea = rect(0,19,13,61)
+		enemySpawnArea = rect(86,19,13,61)
+	}
+	
+}
+
+export function update(){
+	if(!isInit){
+        init();
+        isInit=true;
+    }
+	
 	creeps = getObjectsByPrototype(Creep).filter(creep=>!creep.my&&creep.hits!=null)
 	creeps.forEach(creep=>{
 		if(!creep.profiler)
@@ -57,10 +88,21 @@ export function update(){
 
     let visual = new Visual(0,false)
 
-    //交戦エリア
-    visual.rect({x:15,y:0},70,100)
-    //敵陣地
+    //障害物検知
+    for(let y = 0; y < 100; y++) {
+        for(let x = 0; x < 100; x++) {
+            //matrixAttacker.set(x,y,0)
+            //visual.text("2",{x:x,y:y},{font:0.4})
+        }
+    } 
 
+    //交戦エリア
+    visual.rect(centerArea,centerArea.w,centerArea.h,{opacity:0.1})
+    visual.rect(mySpawnArea,mySpawnArea.w,mySpawnArea.h,{opacity:0.1,fill:'#00f000'})
+    visual.rect(enemySpawnArea,enemySpawnArea.w,enemySpawnArea.h,{opacity:0.1,fill:'#f00000'})
+
+    //敵陣地
+    visual.circle(spawn,{radius:8,opacity:0.1,fill:'#F00000'})
     rangedAttackers.forEach(creep=>{
     	visual.circle(creep,{radius:3,opacity:0.1,fill:'#F00000'})
     })

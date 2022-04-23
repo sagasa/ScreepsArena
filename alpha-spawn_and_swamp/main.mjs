@@ -103,7 +103,7 @@ let trySpawnHunter = function(){
     let creep = entrySpawn([MOVE,MOVE,MOVE,MOVE,MOVE,MOVE,MOVE,MOVE,MOVE,MOVE,RANGED_ATTACK,HEAL],5,(creep)=>{
 
     });
-
+    
 };
 
 const MEMBER_MODE_ATTACK = 0
