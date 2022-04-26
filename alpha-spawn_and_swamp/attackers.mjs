@@ -55,6 +55,8 @@ export function update(){
     squad.trySpawn()
 
     return
+
+    
 }
 let hound
 export function trySpawnHound(priority,callback){
@@ -204,8 +206,8 @@ class attack_squad{
 				if(2<path.length)
 					this.formation_dir = getDirection4(path[1].x-dPos.x,path[1].y-dPos.y)
 
-				const needRange = findInRange(near,ep.attackers,5).length!=0
-
+				let needRange = findInRange(near,ep.attackers,5).length!=0
+				needRange = false
 				if(needRange){
 					//1マス残す
 					if(2<getRange(path[0],near)){

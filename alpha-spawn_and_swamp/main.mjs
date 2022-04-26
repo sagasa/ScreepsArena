@@ -11,6 +11,7 @@ import * as ep from './enemies';
 import * as cp from './creeps';
 import * as workers from './workers';
 import * as attackers from './attackers';
+import * as maps from './maps';
 
 
 
@@ -581,7 +582,7 @@ export function loop() {
         init();
         isInit=true;
     }
-
+    maps.update()
     cp.update()
     ep.update()
 

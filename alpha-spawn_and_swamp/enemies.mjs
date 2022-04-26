@@ -1,8 +1,9 @@
-import { } from '/game/utils';
+import {getTerrainAt } from '/game/utils';
 import {Creep,StructureSpawn,StructureRoad} from '/game/prototypes';
-import {ATTACK,RANGED_ATTACK,HEAL,WORK,CARRY,MOVE} from '/game/constants';
+import {ATTACK,RANGED_ATTACK,HEAL,WORK,CARRY,MOVE,TERRAIN_WALL} from '/game/constants';
 import { } from '/arena';
 import {Visual} from '/game/visual';
+import {CostMatrix,searchPath} from '/game/path-finder';
 import { getObjectsByPrototype,getRange,getTicks } from '/game/utils';
 
 class creep_profiler{
@@ -87,14 +88,7 @@ export function update(){
     transporters = creeps.filter(creep=>creep.body.some(b=>b.type==CARRY))
 
     let visual = new Visual(0,false)
-
-    //障害物検知
-    for(let y = 0; y < 100; y++) {
-        for(let x = 0; x < 100; x++) {
-            //matrixAttacker.set(x,y,0)
-            //visual.text("2",{x:x,y:y},{font:0.4})
-        }
-    } 
+    
 
     //交戦エリア
     visual.rect(centerArea,centerArea.w,centerArea.h,{opacity:0.1})
