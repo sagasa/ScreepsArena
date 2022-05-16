@@ -67,20 +67,54 @@ export function update(){
     	if(posArray[id]==null)
     		continue
     	//初めの座標
-    	let pos = posArray[id][0]
+    	let orgPos = posArray[id][0]
     	//の1上
-    	pos.y -= 1
+    	orgPos.y -= 1
+        let pos = orgPos
 
     	//外周探索
     	visual.circle(pos,{radius:0.3,opacity:0.4,fill:'#0000F0'})
 
-    	let lastDir = BOTTOM_LEFT
-    	
-    	let tmp = move(pos,lastDir)
-    	if(getTerrainAt(tmp)!=TERRAIN_WALL){
-    		visual.circle(pos,{radius:0.3,opacity:0.4,fill:'#0000F0'})
-    	}
-    	
+
+        const array = []
+        let lastDir = LEFT
+
+        out_loop:
+        while(true) {
+
+            in_loop:
+            for(let i = 6; i < 14; i++) {
+                let tmp = move(pos,lastDir+i)
+                if(getTerrainAt(tmp)!=TERRAIN_WALL){
+                    array.push(tmp)
+                    
+                    pos = tmp
+                    lastDir += i
+                    break in_loop
+                }
+            }
+            if(pos.x==orgPos.x&&pos.y==orgPos.y){
+                break out_loop
+            }
+        }
+
+
+        if(id==3){
+            array.sort((a,b)=>compare(orgPos,a,b))
+            array.forEach((p,i)=>{
+                visual.circle(p,{radius:0.1,opacity:0.4,fill:'#0000F0'})
+                visual.text(i,p,{font:0.4})
+            })
+        }
+
+        
     }
 }
 
+function compare(m, a, b){
+    return (a.x-m.x)/(a.y-m.y) - (b.x-m.x)/(b.y-m.y)
+}
+
+function cross3(a, b, c){
+    return (b.x-a.x)*(c.y-a.y) - (b.y-a.y)*(c.x-a.x)
+}
