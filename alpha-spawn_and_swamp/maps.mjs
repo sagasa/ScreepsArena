@@ -112,7 +112,7 @@ export function update(){
         visual.text(id,center,{font:0.4})
 
         //IDリスト登録
-        if(20<length&&length<200)
+        if(20<length&&length<200&&center.x<85&&14<center.x)
             bigIds.push(id)
         allIds.push(id)
 

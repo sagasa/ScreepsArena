@@ -653,7 +653,5 @@ export function loop() {
     }
     // Your code goes here
 
-    console.log("range",getRange({x:10,y:10},{x:20,y:20}))
-
     trySpawn()
 }

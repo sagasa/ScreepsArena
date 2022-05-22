@@ -32,7 +32,7 @@ export function update(){
             matrixAttacker.set(x,y,0)
         }
     }
-    matrixAttacker = ep.map.clone()
+    //matrixAttacker = ep.map.clone()
 
     cp.myCreeps.forEach(creep=>{
         matrixAttacker.set(creep.x, creep.y,8)
@@ -48,18 +48,47 @@ export function update(){
         }
     })
 
-    if(hound)
-    	hound.update()
-    else
-    	trySpawnHound(5,creep=>hound=creep)
 
-    return
+    if(hound&&hound.hitsMax){
+    	hound.update()
+    }else
+    	trySpawnHound(5,creep=>hound=creep)
+    if(killer)
+    	killer.update()
+    else
+    	trySpawnKiller(4,creep=>killer=creep)
+
 
     squad.update()
     squad.trySpawn()
 
     return
 }
+
+
+let killer
+export function trySpawnKiller(priority,callback){
+	entrySpawn([MOVE,MOVE,MOVE,MOVE,MOVE,ATTACK,ATTACK],priority,creep=>{
+
+		creep.update = function(){
+			let workers = ep.workers.filter(creep=>creep.moveTickPlane<10)
+			let transporters = ep.transporters.filter(creep=>creep.moveTickPlane<10)
+			
+			let near = findClosestByRange(this,workers)
+			if(near==null)
+				near = findClosestByRange(this,transporters)
+
+			this.moveTo(near)
+			if(this.attack(near)==ERR_NOT_IN_RANGE){
+	            //最寄りに攻撃を試みる
+	            //this.attack(this.findClosestByRange(ep.creeps))
+	        }
+    	}
+
+    	callback(creep)
+	})
+}
+
 let hound
 export function trySpawnHound(priority,callback){
 	entrySpawn([MOVE,MOVE,MOVE,MOVE,MOVE,MOVE,MOVE,MOVE,MOVE,MOVE,RANGED_ATTACK,HEAL],priority,creep=>{
@@ -67,17 +96,14 @@ export function trySpawnHound(priority,callback){
 		creep.update = function(){
 
 			let visual = new Visual(0,false)
-			
-			for (var x = -1; x <= 1; x++) {
-				for (var y = -1; y <= 1; y++) {
-					const px = this.x+x
-					const py = this.y+y
-					visual.text(matrixAttacker.get(px,py),{x:px,y:py},{font:0.4})
-				}
-			}
 
-			const near = this.findClosestByRange(ep.soldiers)
+			let near = this.findClosestByRange(ep.soldiers)
 
+			//ないなら敵スポーン
+			if(near==null)
+				near = ep.spawn
+
+			//敵位置算出
 			const nearEnemies = ep.soldiers.filter(creep=>getRange(creep,this)<10)
 			let enemyPos = {x:this.x,y:this.y}
 			nearEnemies.forEach(creep=>{
@@ -87,99 +113,114 @@ export function trySpawnHound(priority,callback){
 				enemyPos.x += delta.x
 				enemyPos.y += delta.y
 			})
-
-			const ex = this.x - enemyPos.x
-			const ey = this.y - enemyPos.y
-			const border = {x:this.x-ey,y:this.y+ex}
 			
 
 			if(0<nearEnemies.length)
 				visual.circle(enemyPos,{radius:0.5,opacity:0.3,fill:'#FF0000'})
-			//逃げるか引き撃ちか判定
+			
 			//ヒールレートで判断 TODO
 
+			//移動速度計算
+			const moveCount = this.body.filter(b=>b.type==MOVE&&0<b.hits).length
+			const otherCount = this.body.filter(b=>b.type!=MOVE&&0<b.hits).length
+			const moveTickSwamp = Math.ceil(otherCount/moveCount*5)
+			const moveTickPlane = Math.ceil(otherCount/moveCount)
+			const pathProp = {plainCost:moveTickPlane,swampCost:moveTickSwamp,costMatrix:matrixAttacker}
 
+			//逃げるか引き撃ちか判定
+			const fullHP = this.hitsMax<this.hits+50
+			const inDanger = nearEnemies.some(creep=>getRange(this,creep)<creep.dangerRadius)
+			const inSafe = nearEnemies.every(creep=>creep.dangerRadius<getRange(this,creep))
 
-			if(4<this.getRangeTo(near)&&this.hitsMax<this.hits+50){
+			if(inSafe&&fullHP){
 				this.moveTo(near,ignoreSwamp)
 				visual.line(this,near)
-			}else if(this.getRangeTo(near)<4){
+			}else if(inDanger||!fullHP){
 				//撤退する方向
 
-				let ex = this.x - enemyPos.x
-				let ey = this.y - enemyPos.y
-
-				//後ろを抽出
-				if(this.currentShield==null){
-					visual.line(this,{x:this.x-ey,y:this.y+ex})
-					const backIds = mp.bigIds.filter(id=>util.cross3(this,{x:this.x-ey,y:this.y+ex},mp.id2Center[id])<0)
-					this.currentShield = util.getMin(backIds,(a,b)=>getRange(mp.id2Center[a],this)-getRange(mp.id2Center[b],this))
-					
-					visual.circle(nextMove,{radius:0.2,opacity:0.4,fill:'#F0F0F0'})
-				}
-
+				const ex = this.x - enemyPos.x
+				const ey = this.y - enemyPos.y
+				const border = {x:this.x-ey,y:this.y+ex}
 				//敵が前にいるなら場所を変更
-				if(nearEnemies.some(creep=>util.cross3(this,border,creep)<0)){
-					console.log("前からくるぞ！！！")
-					//ベクトル化
-					let vec = util.sub(this,mp.id2Center[this.currentShield])
-					//90°回す
-					util.rotate90(vec)
-					//座標化
-					util.sum(this,vec,vec)
+				if(nearEnemies.some(creep=>util.cross3(this,border,creep)<0))
+					this.currentShield = null
 
+				//次の遮蔽を検索
+				if(this.currentShield==null){
+					console.log("calc next shield")
+					let minScore = 200
+					let minId
 					mp.bigIds.forEach(id=>{
-						//ベクトル化
-						let vec = util.sub(this,mp.id2Center[id])
-						//90°回す
-						util.rotate90(vec)
-						//正規化
-						util.norm(vec)
+						const score = this.getDangerScore(id,nearEnemies)
 
-						//visual.line(this,vec,{color:'#00F000'})
-
-						//敵の数 180°1pt 120°2pt
-						let enemyScore = 0
-						id,nearEnemies.forEach(creep=>{
-							const cross = util.cross(vec,util.norm(util.sub(creep,this)))
-							if(0.5<cross){
-								enemyScore += 2
-							}else if(0<cross){
-								enemyScore += 1
-							}
-						})
-						//ベクトル化して正規化した
-						console.log("enemyCount id",id,"score",enemyScore,"range",getRange(this,mp.id2Center[id]))
-						
-					})
-
-					const backIds = mp.bigIds.filter(id=>util.cross3(this,vec,mp.id2Center[id])<0)
-					this.currentShield = util.getMin(backIds,(a,b)=>getRange(mp.id2Center[a],this)-getRange(mp.id2Center[b],this))
-
-					backIds.forEach(id=>{
 						const pos = mp.id2Center[id]
+						pos.y -= 1
 						visual.circle(pos,{radius:0.2,opacity:0.4,fill:'#00F000'})
-						
+						visual.text(score,pos,{font:0.4})
+
+						if(score<minScore){
+							minScore = score
+							minId = id
+						}
 					})
+					this.currentShield = minId
 				}
 
-				console.log("currentShield ",this.currentShield,mp.id2Center[this.currentShield])
+				
 
-				let rPoint = this.getEscapePos(this.currentShield,enemyPos)
-				console.log("back point ",rPoint)
+				//console.log("currentShield ",this.currentShield,mp.id2Center[this.currentShield])
 
-				let epath = findPath(this, rPoint,ignoreSwamp)
+				let rPoint = this.getEscapePos(enemyPos)
+				//console.log("back point ",rPoint)
+
+				let epath = findPath(this, rPoint,pathProp)
 				let nextMove = epath[0]
 				
-				this.moveTo(nextMove,ignoreSwamp)
-				visual.line(this,rPoint,{color:'#0000F0'})
+				let prev = this
+				for (var i = 0; i < epath.length&&i<5; i++) {
+					visual.line(prev,epath[i],{color:'#0000F0',opacity:0.2})
+					prev = epath[i]
+				}
+				
+				this.moveTo(nextMove,pathProp)
+				visual.line(this,rPoint,{color:'#0000F0',lineStyle:'dotted',opacity:0.2})
 			}
 			//console.log(matrixAttacker.get(this.x,this.y))
 			
 			this.heal(this)
 			this.autoAttack(near)
 	    }
- 		creep.getEscapePos = function(backId,enemyPos){
+
+	    //敵の数 180°10pt 120°20pt 距離1 1pt
+	    creep.getDangerScore = function(id,enemies){
+	    	const pos = mp.id2Center[id]
+	    	//ベクトル化
+			let vec = util.sub(this,pos)
+			//90°回す
+			util.rotate90(vec)
+			//正規化
+			util.norm(vec)
+
+			//敵の数 180°1pt 120°2pt
+			let enemyScore = 0
+			enemies.forEach(creep=>{
+				//ベクトル化して正規化して外積を取る
+				const cross = util.cross(vec,util.norm(util.sub(creep,this)))
+				if(0.5<cross){
+					enemyScore += 20
+				}else if(0<cross){
+					enemyScore += 10
+				}
+			})
+			
+
+			const total = getRange(this,pos)+enemyScore			
+			//console.log("enemyCount id",id,"score",total,"enemy",enemyScore,"range",getRange(this,pos))
+			return total
+	    }
+
+ 		creep.getEscapePos = function(enemyPos){
+ 			const backId = this.currentShield
  			let visual = new Visual(0,false)
 	    	visual.circle(mp.id2Center[backId],{radius:0.2,opacity:0.4,fill:'#00F000'})
 	    	let rPoint = {x:50,y:50}
@@ -201,6 +242,11 @@ export function trySpawnHound(priority,callback){
 		        	rPoint = a
 		        }else{
 		        	rPoint = b
+		        }
+		        //次の位置の近くに敵がいるなら
+		        if(ep.soldiers.some(creep=>getRange(creep,rPoint)<3)){
+		        	this.currentShield = null
+		        	console.log("clear currentShield")
 		        }
 		        //console.log("次の移動位置")
 			}else{
@@ -241,6 +287,9 @@ export function trySpawnHound(priority,callback){
 		callback(creep)
 	})
 }
+
+
+
 
 
 const d2p = [{x:2,y:0,transpose:false},{x:0,y:2,transpose:true},{x:-2,y:0,transpose:false},{x:0,y:-2,transpose:true}]
@@ -288,7 +337,7 @@ class attack_squad{
 	        })       
 	    }
 		
-		if(this.attackers.length<2){
+		if(this.attackers.length<0){
 			const priority = this.attackers.length<2 ? 4 : 3
 	        trySpawnAttacker(priority,creep=>{
 	        	this.attackers.push(creep)

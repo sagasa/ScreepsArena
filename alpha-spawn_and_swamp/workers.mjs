@@ -88,7 +88,7 @@ export function update(){
 
     energyCollectors = energyCollectors.filter(creep=>creep.hitsMax)
     energyCollectors.forEach(et=>et.update())
-    if(energyCollectors.length<0){
+    if(energyCollectors.length<1){
         const priority = 5
         trySpawnEnergyCollector(priority,(creep)=>energyCollectors.push(creep))
     }

@@ -25,9 +25,21 @@ class creep_profiler{
 		let moveCount = creep.body.filter(b=>b.type==MOVE&&0<b.hits).length
 		let otherCount = creep.body.filter(b=>b.type!=MOVE&&b.type!=CARRY&&0<b.hits).length
 
-		this.moveTickSwamp = Math.ceil(otherCount/moveCount*5)
-		this.moveTickPlane = Math.ceil(otherCount/moveCount)
-		this.canMove = creep.fatigue <= 0 && 0 < moveCount
+		creep.moveTickSwamp = Math.ceil(otherCount/moveCount*5)
+		creep.moveTickPlane = Math.ceil(otherCount/moveCount)
+		creep.canMove = creep.fatigue <= 0 && 0 < moveCount
+
+		//攻撃性計測
+		
+		if(creep.body.some(b=>b.type==RANGED_ATTACK&&0<b.hits)){
+			//遠距離持ち
+			creep.dangerRadius = 4
+		}else if(creep.body.some(b=>b.type==ATTACK&&0<b.hits)){
+			//近接持ち
+			creep.dangerRadius = 3
+		}
+		
+		
 
 		//console.log("move tick",this.moveTickSwamp,this.moveTickPlane,this.canMove)
 
@@ -96,6 +108,16 @@ export function update(){
 
     let visual = new Visual(0,false)
 
+
+    //敵の数
+    visual.text('soldier count '+soldiers.length,{x:10,y:-8},{font:1.4,color:'#00F000'})
+    visual.text('attacker count '+attackers.length,{x:10,y:-6},{font:1.4,color:'#00F000'})
+    visual.text('rangedAttacker count '+rangedAttackers.length,{x:10,y:-4},{font:1.4,color:'#00F000'})
+    visual.text('healer count '+healers.length,{x:10,y:-2},{font:1.4,color:'#00F000'})
+
+    visual.text('workers count '+workers.length,{x:40,y:-8},{font:1.4,color:'#00F000'})
+    visual.text('transporters count '+transporters.length,{x:40,y:-6},{font:1.4,color:'#00F000'})
+
     //脅威度Map作成
     map = new CostMatrix()
     rangedAttackers.forEach(creep=>{
@@ -121,9 +143,9 @@ export function update(){
     
 
     //交戦エリア
-    visual.rect(centerArea,centerArea.w,centerArea.h,{opacity:0.1})
-    visual.rect(mySpawnArea,mySpawnArea.w,mySpawnArea.h,{opacity:0.1,fill:'#00f000'})
-    visual.rect(enemySpawnArea,enemySpawnArea.w,enemySpawnArea.h,{opacity:0.1,fill:'#f00000'})
+    //visual.rect(centerArea,centerArea.w,centerArea.h,{opacity:0.1})
+    //visual.rect(mySpawnArea,mySpawnArea.w,mySpawnArea.h,{opacity:0.1,fill:'#00f000'})
+    //visual.rect(enemySpawnArea,enemySpawnArea.w,enemySpawnArea.h,{opacity:0.1,fill:'#f00000'})
 
     //敵陣地
     visual.circle(spawn,{radius:8,opacity:0.1,fill:'#F00000'})
