@@ -9,22 +9,27 @@ import { getObjectsByPrototype,getRange,getTicks } from '/game/utils';
 class creep_profiler{
 
 	constructor(creep){
+		//移動計測用
 		this.lastPos={x:creep.x,y:creep.y}
 		this.lastMoveTick
-		let moveCount = creep.body.filter(b=>b.type==MOVE).length
-		let otherCount = creep.body.filter(b=>b.type!=MOVE&&b.type!=CARRY).length
 
-		this.moveTickSwamp = Math.ceil(otherCount/moveCount*5)
-		this.moveTickPlane = Math.ceil(otherCount/moveCount)
-
-		console.log(this.moveTickSwamp,this.moveTickPlane)
 		this.weight
 	}
 	update(creep){
 		if(creep.x!=this.lastPos.x||creep.y!=this.lastPos.y){
 			this.lastMoveTick = getTicks()
-			console.log('move',this.lastMoveTick)
+			//console.log('move',this.lastMoveTick)
 		}
+
+		//機動力計測
+		let moveCount = creep.body.filter(b=>b.type==MOVE&&0<b.hits).length
+		let otherCount = creep.body.filter(b=>b.type!=MOVE&&b.type!=CARRY&&0<b.hits).length
+
+		this.moveTickSwamp = Math.ceil(otherCount/moveCount*5)
+		this.moveTickPlane = Math.ceil(otherCount/moveCount)
+		this.canMove = creep.fatigue <= 0 && 0 < moveCount
+
+		//console.log("move tick",this.moveTickSwamp,this.moveTickPlane,this.canMove)
 
 		this.lastPos = {x:creep.x,y:creep.y}
 	}
@@ -38,6 +43,8 @@ export let healers=[]
 export let workers=[]
 export let transporters=[]
 export let soldiers=[]
+
+export let map = new CostMatrix()
 
 let isInit,sideLeft
 
@@ -88,6 +95,29 @@ export function update(){
     transporters = creeps.filter(creep=>creep.body.some(b=>b.type==CARRY))
 
     let visual = new Visual(0,false)
+
+    //脅威度Map作成
+    map = new CostMatrix()
+    rangedAttackers.forEach(creep=>{
+    	if(creep.profiler.canMove){
+    		paint(creep,3,1,15)
+
+    	}else{
+    		paint(creep,3,0,15)
+    	}
+    	//visual.text(map.get(creep.x,creep.y),creep,{font:0.3})
+    })
+
+    attackers.forEach(creep=>{
+    	if(creep.profiler.canMove){
+    		paint(creep,1,1,20)
+
+    	}else{
+    		paint(creep,1,0,20)
+    	}
+    })
+
+    
     
 
     //交戦エリア
@@ -97,8 +127,17 @@ export function update(){
 
     //敵陣地
     visual.circle(spawn,{radius:8,opacity:0.1,fill:'#F00000'})
-    rangedAttackers.forEach(creep=>{
-    	visual.circle(creep,{radius:3,opacity:0.1,fill:'#F00000'})
-    })
+}
 
+function paint(center,size,ext,weight){
+	const total = size + ext
+	let visual = new Visual(0,false)
+	if(0 < ext)
+		visual.rect({x:center.x-total-0.4,y:center.y-total-0.4},total*2+0.8,total*2+0.8,{opacity:0.1,fill:'#F0F000',stroke :'#FFF000'})
+	visual.rect({x:center.x-size-0.4,y:center.y-size-0.4},size*2+0.8,size*2+0.8,{opacity:0.1,fill:'#F0F000',stroke :'#F00000'})
+	for (let x = center.x - total; x <= center.x + total; x++) {
+		for (let y = center.y - total; y <= center.y + total; y++) {
+			map.set(x,y,weight)
+		}	
+	}
 }

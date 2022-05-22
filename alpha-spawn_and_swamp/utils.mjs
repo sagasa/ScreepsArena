@@ -57,6 +57,8 @@ export function trySpawn(){
 }
 
 export function getMin(array,func){
+    if(array.length==1)
+        return array[0]
 	let min = null
 	array.forEach(e=>{
 		if(min==null||func(e,min)<0)
@@ -64,6 +66,22 @@ export function getMin(array,func){
 	})
     return min
 }
+
+export function getMinIndex(array,func){
+    if(array.length==1)
+        return 0
+    let min = null
+    let index = -1
+    array.forEach((e,i)=>{
+        if(min==null||func(e,min)<0){
+            min = e
+            index = i
+        }
+    })
+    return index
+}
+
+
 
 export function canMove(pos){
     return getTerrainAt({x: pos.x, y: pos.y})!=1
@@ -135,4 +153,68 @@ export function getDirection4(x,y){
 
 export function clamp1(val){
     return Math.max(-1,Math.min(1,val))
+}
+
+export function dot3(a, b, c){
+    const ax = a.x-b.x
+    const bx = c.x-b.x
+    const ay = a.y-b.y
+    const by = c.y-b.y
+    return ax*bx + ay*by
+}
+
+export function dot(a, b){
+    return a.x*b.x + a.y*b.y
+}
+
+export function cross3(a, b, c){
+    return (b.x-a.x)*(c.y-a.y) - (b.y-a.y)*(c.x-a.x)
+}
+
+export function cross(a, b){
+    return (a.x)*(b.y) - (a.y)*(b.x)
+}
+
+//dest無しならvを改変
+export function norm(v,dest){
+    const l = Math.sqrt(v.x*v.x+v.y*v.y)
+    if(dest==null){
+        v.x /= l
+        v.y /= l
+        return v
+    }
+    dest = v.x/l
+    dest = v.y/l
+    return dest
+}
+
+//90°回す
+export function rotate90(vec,dest){
+    const x = vec.x
+    const y = vec.y
+    if(dest==null){
+        vec.x = -y
+        vec.y = x
+        return vec
+    }
+    
+    dest.x = -y
+    dest.y = x
+    return dest
+}
+
+export function sum(v0,v1,dest){
+    if(dest==null)
+        return {x:v0.x+v1.x,y:v0.y+v1.y}
+    dest.x = v0.x+v1.x
+    dest.y = v0.y+v1.y
+    return dest
+}
+
+export function sub(v0,v1,dest){
+    if(dest==null)
+        return {x:v0.x-v1.x,y:v0.y-v1.y}
+    dest.x = v0.x-v1.x
+    dest.y = v0.y-v1.y
+    return dest
 }

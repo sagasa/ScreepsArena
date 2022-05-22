@@ -8,9 +8,11 @@ import {Visual} from '/game/visual';
 
 import {spawn_holder} from './utils';
 import {check3x3,move,getDirection4,clamp1,entrySpawn} from './utils';
+import * as util from './utils';
 
 import * as ep from './enemies';
 import * as cp from './creeps';
+import * as mp from './maps';
 
 let groupPoint ,isInit
 
@@ -29,7 +31,9 @@ export function update(){
         for(let x = 0; x < 100; x++) {
             matrixAttacker.set(x,y,0)
         }
-    } 
+    }
+    matrixAttacker = ep.map.clone()
+
     cp.myCreeps.forEach(creep=>{
         matrixAttacker.set(creep.x, creep.y,8)
     })
@@ -55,8 +59,6 @@ export function update(){
     squad.trySpawn()
 
     return
-
-    
 }
 let hound
 export function trySpawnHound(priority,callback){
@@ -64,14 +66,167 @@ export function trySpawnHound(priority,callback){
 
 		creep.update = function(){
 
-			this.moveTo({x:50,y:50})
+			let visual = new Visual(0,false)
 			
-			const near = this.findClosestByRange(ep.creeps)
+			for (var x = -1; x <= 1; x++) {
+				for (var y = -1; y <= 1; y++) {
+					const px = this.x+x
+					const py = this.y+y
+					visual.text(matrixAttacker.get(px,py),{x:px,y:py},{font:0.4})
+				}
+			}
 
+			const near = this.findClosestByRange(ep.soldiers)
+
+			const nearEnemies = ep.soldiers.filter(creep=>getRange(creep,this)<10)
+			let enemyPos = {x:this.x,y:this.y}
+			nearEnemies.forEach(creep=>{
+				const delta = {x:creep.x-this.x,y:creep.y-this.y}
+				visual.circle(creep,{radius:0.4,opacity:0.2,fill:'#FF0000'})
+				util.norm(delta)
+				enemyPos.x += delta.x
+				enemyPos.y += delta.y
+			})
+
+			const ex = this.x - enemyPos.x
+			const ey = this.y - enemyPos.y
+			const border = {x:this.x-ey,y:this.y+ex}
 			
+
+			if(0<nearEnemies.length)
+				visual.circle(enemyPos,{radius:0.5,opacity:0.3,fill:'#FF0000'})
+			//逃げるか引き撃ちか判定
+			//ヒールレートで判断 TODO
+
+
+
+			if(4<this.getRangeTo(near)&&this.hitsMax<this.hits+50){
+				this.moveTo(near,ignoreSwamp)
+				visual.line(this,near)
+			}else if(this.getRangeTo(near)<4){
+				//撤退する方向
+
+				let ex = this.x - enemyPos.x
+				let ey = this.y - enemyPos.y
+
+				//後ろを抽出
+				if(this.currentShield==null){
+					visual.line(this,{x:this.x-ey,y:this.y+ex})
+					const backIds = mp.bigIds.filter(id=>util.cross3(this,{x:this.x-ey,y:this.y+ex},mp.id2Center[id])<0)
+					this.currentShield = util.getMin(backIds,(a,b)=>getRange(mp.id2Center[a],this)-getRange(mp.id2Center[b],this))
+					
+					visual.circle(nextMove,{radius:0.2,opacity:0.4,fill:'#F0F0F0'})
+				}
+
+				//敵が前にいるなら場所を変更
+				if(nearEnemies.some(creep=>util.cross3(this,border,creep)<0)){
+					console.log("前からくるぞ！！！")
+					//ベクトル化
+					let vec = util.sub(this,mp.id2Center[this.currentShield])
+					//90°回す
+					util.rotate90(vec)
+					//座標化
+					util.sum(this,vec,vec)
+
+					mp.bigIds.forEach(id=>{
+						//ベクトル化
+						let vec = util.sub(this,mp.id2Center[id])
+						//90°回す
+						util.rotate90(vec)
+						//正規化
+						util.norm(vec)
+
+						//visual.line(this,vec,{color:'#00F000'})
+
+						//敵の数 180°1pt 120°2pt
+						let enemyScore = 0
+						id,nearEnemies.forEach(creep=>{
+							const cross = util.cross(vec,util.norm(util.sub(creep,this)))
+							if(0.5<cross){
+								enemyScore += 2
+							}else if(0<cross){
+								enemyScore += 1
+							}
+						})
+						//ベクトル化して正規化した
+						console.log("enemyCount id",id,"score",enemyScore,"range",getRange(this,mp.id2Center[id]))
+						
+					})
+
+					const backIds = mp.bigIds.filter(id=>util.cross3(this,vec,mp.id2Center[id])<0)
+					this.currentShield = util.getMin(backIds,(a,b)=>getRange(mp.id2Center[a],this)-getRange(mp.id2Center[b],this))
+
+					backIds.forEach(id=>{
+						const pos = mp.id2Center[id]
+						visual.circle(pos,{radius:0.2,opacity:0.4,fill:'#00F000'})
+						
+					})
+				}
+
+				console.log("currentShield ",this.currentShield,mp.id2Center[this.currentShield])
+
+				let rPoint = this.getEscapePos(this.currentShield,enemyPos)
+				console.log("back point ",rPoint)
+
+				let epath = findPath(this, rPoint,ignoreSwamp)
+				let nextMove = epath[0]
+				
+				this.moveTo(nextMove,ignoreSwamp)
+				visual.line(this,rPoint,{color:'#0000F0'})
+			}
+			//console.log(matrixAttacker.get(this.x,this.y))
 			
 			this.heal(this)
 			this.autoAttack(near)
+	    }
+ 		creep.getEscapePos = function(backId,enemyPos){
+ 			let visual = new Visual(0,false)
+	    	visual.circle(mp.id2Center[backId],{radius:0.2,opacity:0.4,fill:'#00F000'})
+	    	let rPoint = {x:50,y:50}
+			const convexRange = mp.getRangeConvex(backId,this)
+
+			//触れているなら
+			if(convexRange.dist<=1){
+
+				const a = mp.getPointConvex(backId,convexRange.pos+0.2)
+				const b = mp.getPointConvex(backId,convexRange.pos+0.8)
+				//convexRange.pos
+				const va = {x:a.x-this.x,y:a.y-this.y}
+				const vb = {x:b.x-this.x,y:b.y-this.y}
+		        const v0 = {x:enemyPos.x-this.x,y:enemyPos.y-this.y}
+		        util.norm(va)
+		        util.norm(vb)
+				        
+		        if(util.dot(va,v0)<util.dot(vb,v0)){
+		        	rPoint = a
+		        }else{
+		        	rPoint = b
+		        }
+		        //console.log("次の移動位置")
+			}else{
+				//接点の中で最も安全なものを
+				rPoint = util.getMin(mp.getTangentConvex(backId,this),(a,b)=>{
+					const va = {x:a.x-this.x,y:a.y-this.y}
+					const vb = {x:b.x-this.x,y:b.y-this.y}
+		            const v0 = {x:enemyPos.x-this.x,y:enemyPos.y-this.y}
+		            util.norm(va)
+		            util.norm(vb)
+		            const la = util.dot(va,v0)
+		            const lb = util.dot(vb,v0)
+		            return la - lb
+				})
+				//console.log("最良の接点",convexRange.dist)
+			}
+					
+			mp.getTangentConvex(backId,this).forEach(a=>{
+				const v0 = {x:a.x-this.x,y:a.y-this.y}
+	            const v1 = {x:enemyPos.x-this.x,y:enemyPos.y-this.y}
+	            util.norm(v0)
+	            const l = util.dot(v0,v1)
+	            //console.log("dot ",a,l)
+	            visual.text(l,a,{font:0.4})
+			})
+			return rPoint
 	    }
 
 	    creep.autoAttack = function(target){
@@ -100,9 +255,10 @@ const rightIndexes = [1,6,11]
 const leftIndexes = [3,8,13]
 const frontIndexes = [1,2,3]
 
-const matrixAttacker = new CostMatrix
+let matrixAttacker = new CostMatrix
 const pathAttacker = {plainCost:1,swampCost:5,costMatrix:matrixAttacker}
 const ignoreSwamp = {plainCost:1,swampCost:1,costMatrix:matrixAttacker}
+const goSwamp = {plainCost:2,swampCost:1,costMatrix:matrixAttacker}
 
 const RET_ASSIGN = 0
 const RET_EMPTY = 1
