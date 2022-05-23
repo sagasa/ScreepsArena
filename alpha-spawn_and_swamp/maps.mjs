@@ -23,6 +23,11 @@ export let bigIds = []
 export let allIds = []
 
 
+//色分け
+class MapData{
+    
+}
+
 export function update(){
 
     bigIds = []

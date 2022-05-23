@@ -1,5 +1,5 @@
 import {getTerrainAt } from '/game/utils';
-import {Creep,StructureSpawn,StructureRoad} from '/game/prototypes';
+import {Creep,StructureSpawn,StructureRoad,StructureExtension} from '/game/prototypes';
 import {ATTACK,RANGED_ATTACK,HEAL,WORK,CARRY,MOVE,TERRAIN_WALL} from '/game/constants';
 import { } from '/arena';
 import {Visual} from '/game/visual';
@@ -33,7 +33,10 @@ class creep_profiler{
 		
 		if(creep.body.some(b=>b.type==RANGED_ATTACK&&0<b.hits)){
 			//遠距離持ち
-			creep.dangerRadius = 4
+			if(creep.canMove)
+				creep.dangerRadius = 4
+			else
+				creep.dangerRadius = 3
 		}else if(creep.body.some(b=>b.type==ATTACK&&0<b.hits)){
 			//近接持ち
 			creep.dangerRadius = 3
@@ -47,7 +50,9 @@ class creep_profiler{
 	}
 }
 
+export let extensions=[]
 export let spawn
+
 export let creeps=[]
 export let attackers=[]
 export let rangedAttackers=[]
@@ -65,7 +70,7 @@ export let centerArea,enemySpawnArea,mySpawnArea
 function rect(x,y,w,h){
 	const rect = {x:x,y:y,w:w,h:h}
 	rect.contain = function(pos){
-
+		return this.x<=pos.x&&pos.x<=this.x+this.w&&this.y<=pos.y&&pos.y<=this.y+this.h
 	}
 	return rect
 }
@@ -91,6 +96,8 @@ export function update(){
         isInit=true;
     }
 	
+    extensions = getObjectsByPrototype(StructureExtension).filter(os=>!os.my)
+
 	creeps = getObjectsByPrototype(Creep).filter(creep=>!creep.my&&creep.hits!=null)
 	creeps.forEach(creep=>{
 		if(!creep.profiler)
@@ -121,7 +128,7 @@ export function update(){
     //脅威度Map作成
     map = new CostMatrix()
     rangedAttackers.forEach(creep=>{
-    	if(creep.profiler.canMove){
+    	if(creep.canMove){
     		paint(creep,3,1,15)
 
     	}else{
@@ -131,7 +138,7 @@ export function update(){
     })
 
     attackers.forEach(creep=>{
-    	if(creep.profiler.canMove){
+    	if(creep.canMove){
     		paint(creep,1,1,20)
 
     	}else{
