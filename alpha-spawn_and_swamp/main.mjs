@@ -12,7 +12,7 @@ import * as cp from './creeps';
 import * as workers from './workers';
 import * as attackers from './attackers';
 import * as maps from './maps';
-
+import * as pf from './profiler';
 
 
 class creep_manager{
@@ -578,6 +578,8 @@ export function init(){
 let ec
 
 export function loop() {
+    pf.update()
+
     if(!isInit){
         init();
         isInit=true;
@@ -587,9 +589,12 @@ export function loop() {
     ep.update()
     maps.update()
 
+    pf.lap('updateInfo')
+
     workers.update()
     attackers.update()
     
+    pf.lap('updateCreep')    
 
     
 
@@ -654,4 +659,6 @@ export function loop() {
     // Your code goes here
 
     trySpawn()
+
+    pf.lap('end')
 }
