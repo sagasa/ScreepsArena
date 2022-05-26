@@ -23,7 +23,7 @@ export function init(){
 }
 
 export function loop() {
-    pf.update()
+    pf.start()
 
     if(!isInit){
         init();
@@ -34,14 +34,15 @@ export function loop() {
     ep.update()
     maps.update()
 
-    pf.lap('updateInfo')
+    pf.lap('updateInfo','#FF8000')
 
     workers.update()
     attackers.update()
     
-    pf.lap('updateCreep')    
+    pf.lap('updateAattackers','#F00000')    
 
     trySpawn()
 
-    pf.lap('end')
+    pf.lap('end','#00FFFF')
+    pf.end()
 }

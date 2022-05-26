@@ -28,6 +28,7 @@ class creep_profiler{
 		creep.moveTickSwamp = Math.ceil(otherCount/moveCount*5)
 		creep.moveTickPlane = Math.ceil(otherCount/moveCount)
 		creep.canMove = creep.fatigue <= 0 && 0 < moveCount
+		creep.moveTimer = Math.ceil(creep.fatigue / moveCount / 2)
 
 		//攻撃性計測
 		

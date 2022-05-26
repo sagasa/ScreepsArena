@@ -8,8 +8,9 @@ import {CostMatrix,searchPath} from '/game/path-finder';
 import {canMove,check3x3,move,getDirection4,clamp1,getMin,entrySpawn} from './utils';
 import * as ep from './enemies';
 import * as cp from './creeps';
-
+import * as util from './utils';
 import {Visual} from '/game/visual';
+import * as pf from './profiler';
 
 let constructionSites
 
@@ -40,15 +41,20 @@ export function update(){
 
     extensions = cp.ownedStructures.filter(str=>str.my&&str instanceof StructureExtension&&str.store.energy<100)
 
+    //すべてのリソースコンテナ
     allContaineRresources = getObjectsByPrototype(StructureContainer).filter(rc=>rc.x!=null)
 
-
+    //中身入りのリソースコンテナ
     containeRresources = allContaineRresources.filter(resource=>0<resource.store.getUsedCapacity())
 
+    //スタート地点の中身入りリソースコンテナ
     startContaineResources = containeRresources.filter(r=>getRange(mySpawn,r)<6)
-
-    staticContaineResources = containeRresources.filter(r=>r.ticksToDecay==null)
+    //自然沸きした中身入りリソースコンテナ
     neutralContaineResources = containeRresources.filter(r=>r.ticksToDecay!=null)
+
+
+    //敵のものを含む
+    staticContaineResources = containeRresources.filter(r=>r.ticksToDecay==null)
 
     constructionSites = getObjectsByPrototype(ConstructionSite)
     
@@ -79,19 +85,21 @@ export function update(){
         matrixWorker.set(cs.x, cs.y, 20)
     })
     
+    pf.lap('workerInfo','#008000') 
     energyTransporters = energyTransporters.filter(creep=>creep.hitsMax)
     energyTransporters.forEach(et=>et.update())
     if(energyTransporters.length<2){
         const priority = energyTransporters.length<=2 ? 10 : 3
         trySpawnEnergyTransporter(priority,(creep)=>energyTransporters.push(creep))
     }
-
+    pf.lap('ET','#80FF00')
     energyCollectors = energyCollectors.filter(creep=>creep.hitsMax)
     energyCollectors.forEach(et=>et.update())
     if(energyCollectors.length<1){
         const priority = 5
         trySpawnEnergyCollector(priority,(creep)=>energyCollectors.push(creep))
     }
+    pf.lap('EC','#F0FF00')
 }
 
 
@@ -225,6 +233,8 @@ function findRresourcesEC(pos){
 }
 
 const EC_STATE_MAKE_TANK = 0
+const EC_STATE_WORK = 1
+const EC_STATE_DISCHARGE = 2
 const EC_STATE_TRANSFER = 1
 const EC_STATE_MAKE_EXT = 2
 const EC_STATE_MOVE = 3
@@ -232,6 +242,159 @@ const EC_STATE_MOVE = 3
 const pathEnergyCollector = {plainCost:1,swampCost:2,costMatrix:matrixWorker}
 
 export function trySpawnEnergyCollector(priority,callback){
+    entrySpawn([WORK,WORK,WORK,MOVE,MOVE,MOVE,MOVE,MOVE,MOVE,MOVE,MOVE,CARRY,CARRY,CARRY,CARRY,CARRY,CARRY],priority,(creep)=>{
+
+        creep.target = findRresourcesEC(creep)
+        creep.state = EC_STATE_MOVE
+        creep.constructions = []
+        creep.extensions = []
+
+
+        creep.update = function(){
+           
+            
+            //console.log("decay",target.ticksToDecay,"state",this.state,"=",target.x,target.y)
+
+            console.log("state",this.state)
+            
+            if(this.state == EC_STATE_MOVE){
+                this.doMove()
+            }else if(this.state == EC_STATE_WORK){
+                this.doWork()
+            }else if(this.state == EC_STATE_DISCHARGE){
+                util.tryJob(this.transfer(this.container,RESOURCE_ENERGY),'transfer')
+                this.state = EC_STATE_MOVE
+                this.target = findRresourcesEC(this)
+                this.doMove()
+            }
+        }
+
+
+        //今のtickでtransferができるならinstant
+        creep.transitDischarge = function(instant){
+            //空か移動に成功したなら
+            if(this.store.getUsedCapacity()<=0||(instant&&util.tryJob(this.transfer(this.container,RESOURCE_ENERGY),'transfer'))){
+                this.state = EC_STATE_MOVE
+                this.target = findRresourcesEC(this)
+                this.doMove()
+            }else{
+                this.state = EC_STATE_DISCHARGE
+            }
+        }
+
+        creep.doMove = function(){
+            if(this.target==null||this.target.harvestTime<20&&getTicks()%50==1||this.target.object.store==null)
+                this.target = findRresourcesEC(this)
+
+            const target = this.target.object
+
+            if(!target.store){
+                console.log("err container not found")
+                return
+            }
+            
+            if(this.withdraw(target,RESOURCE_ENERGY)!=ERR_NOT_IN_RANGE){
+                //到着
+                this.state = EC_STATE_WORK
+                this.container = null
+                this.extensions = []
+                this.constructions.forEach(cs=>cs.remove())
+                this.constructions = []
+
+                //コンテナ
+                util.tryCreateConstructionSite(this,StructureContainer,obj=>this.constructions.push(obj))
+                //防壁
+                util.tryCreateConstructionSite(this,StructureRampart,obj=>this.constructions.push(obj))
+                //エクステンション
+                for(let dir = 1; dir <= 8; dir+=2) {
+                    util.tryCreateConstructionSite(move(this,dir),StructureExtension,obj=>this.constructions.push(obj))
+                }
+
+                this.doWork()
+            }else{
+                const path = searchPath(this, target,pathEnergyCollector)
+                console.log("decay",target.ticksToDecay,"path",path.cost,"=",target.ticksToDecay-path.cost,path.path[0])
+                this.moveTo(target,pathEnergyCollector);
+            }
+        }
+
+        creep.doWork = function(){
+            const target = this.target.object
+
+            //建設完了確認
+            if(0 < this.constructions.length){
+                //建設が終わったなら
+                if(util.isDone(this.constructions[0])){
+                const finish = this.constructions.shift().structure
+                    const name = finish.constructor.name
+                    //コンテナできたら格納
+                    if(name=='StructureContainer'){
+                        this.container = finish
+                    }else if(name=='StructureExtension'){
+                        this.extensions.push(finish)
+                    }
+                }
+            }
+
+            let from,to
+
+            if(target.store==null||target.store.getUsedCapacity()<=0){
+                from = this.container
+                to = this.extensions.find(ex=>{
+                    const cap = 0<ex.store.getFreeCapacity(RESOURCE_ENERGY)
+                    return cap
+                })
+            }else{
+                //自然沸きがのこっているなら
+                from = target
+                to = this.container
+            }
+
+            let op = false
+            let doBuildOrTransfer = false
+            let doWithdraw = false
+            //エネルギーを移す先があるなら
+            if(to!=null){
+                if(30<this.store.getFreeCapacity(RESOURCE_ENERGY)&&this.store.getUsedCapacity(RESOURCE_ENERGY)<to.store.getFreeCapacity(RESOURCE_ENERGY)){
+                    if(util.tryJob(this.withdraw(from,RESOURCE_ENERGY),'withdraw'))
+                        doWithdraw = true
+                }else{
+                    const amount = Math.min(this.store.getUsedCapacity()-30,to.store.getFreeCapacity(RESOURCE_ENERGY))
+                    if(util.tryJob(this.transfer(to,RESOURCE_ENERGY,amount),'transfer'))
+                        doBuildOrTransfer = true
+                }
+            }
+
+            //建設するものがあるなら
+            if(0 < this.constructions.length){
+                //まだあるなら
+                if(this.store.getUsedCapacity()<115)
+                    if(util.tryJob(this.withdraw(from,RESOURCE_ENERGY),'withdraw'))
+                        doWithdraw = true
+                if(!doBuildOrTransfer){
+                    if(util.tryJob(this.build(this.constructions[0]),'build'))
+                        doBuildOrTransfer = true
+                }
+
+                //エネルギー
+                if(this.store.getUsedCapacity() < 15&&from.store.getUsedCapacity() < 15){
+
+                    this.state = EC_STATE_MOVE
+                    this.target = findRresourcesEC(this)
+                    console.log("break")
+                }
+
+
+            }else{
+                //これで終わりなら
+                this.transitDischarge(!doBuildOrTransfer&&!doWithdraw)
+            }   
+        }
+        callback(creep)
+    })
+}
+
+export function trySpawnEnergyCollector0(priority,callback){
     entrySpawn([WORK,WORK,WORK,MOVE,MOVE,MOVE,MOVE,MOVE,MOVE,MOVE,MOVE,CARRY,CARRY,CARRY,CARRY,CARRY,CARRY],priority,(creep)=>{
 
         creep.target = findRresourcesEC(creep)
@@ -245,15 +408,15 @@ export function trySpawnEnergyCollector(priority,callback){
             
             //console.log("decay",target.ticksToDecay,"state",this.state,"=",target.x,target.y)
 
+            //到着したら
             if(this.state == EC_STATE_MOVE){
                 if(!target.store)
                     return
                 const path = searchPath(this, target,pathEnergyCollector)
                 this.moveTo(target,pathEnergyCollector);
 
-
                 console.log("decay",target.ticksToDecay,"path",path.cost,"=",target.ticksToDecay-path.cost,path.path[0])
-                if(this.withdraw(target,RESOURCE_ENERGY)!=ERR_NOT_IN_RANGE){
+                if(this.withdraw(target,RESOURCE_ENERGY,RESOURCE_ENERGY)!=ERR_NOT_IN_RANGE){
                     this.state = EC_STATE_MAKE_TANK
                     this.construction = null
                 }

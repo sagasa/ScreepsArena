@@ -1,3 +1,5 @@
+import { prototypes, utils } from '/game';
+
 import { getObjectsByPrototype,getRange,findClosestByRange,createConstructionSite,findPath,getDirection,getTerrainAt,findInRange} from '/game/utils';
 import { Creep, StructureSpawn ,StructureContainer,ConstructionSite,StructureTower,StructureRampart} from '/game/prototypes';
 import {MOVE,ERR_NOT_ENOUGH_ENERGY ,RESOURCE_ENERGY,ERR_NOT_IN_RANGE,CARRY,ATTACK,RANGED_ATTACK,HEAL,WORK,TERRAIN_WALL,TERRAIN_SWAMP} from '/game/constants';
@@ -56,6 +58,22 @@ export function trySpawn(){
     spawnEntries = []
 }
 
+//数値化できる場合向け
+export function getMin1(array,func){
+    if(array.length==1)
+        return array[0]
+    let min = null
+    let minValue = 0
+    array.forEach(e=>{
+        const ev = func(e)
+        if(min==null||ev<minValue){
+            min = e
+            minValue = ev
+        }
+    })
+    return min
+}
+
 export function getMin(array,func){
     if(array.length==1)
         return array[0]
@@ -81,7 +99,15 @@ export function getMinIndex(array,func){
     return index
 }
 
-
+export function all3x3(pos,func){
+    for (var x = pos.x-1; x <= pos.x+1; x++) {
+        for (var y = pos.y-1; y <= pos.y+1; y++) {
+            if((pos.x!=x||pos.y!=y)&&!func({x:x,y:y}))
+                return false
+        }
+    }
+    return true
+}
 
 export function canMove(pos){
     return getTerrainAt({x: pos.x, y: pos.y})!=1
@@ -217,4 +243,65 @@ export function sub(v0,v1,dest){
     dest.x = v0.x-v1.x
     dest.y = v0.y-v1.y
     return dest
+}
+
+export function tryCreateConstructionSite(pos,type,callback){
+    const res = utils.createConstructionSite(pos,type)
+    if(res.error)
+        console.log(`err in createConstructionSite at:[${pos.x},${pos.y}], type:${type.name} ,state:${getErrMsg(res.error)}`)
+    else if(callback!=null){
+        callback(res.object)
+    }
+    return res.object
+}
+
+//エラーコードが0以外ならログを出してfalseを返す
+export function tryJob(error,name){
+    
+    if(error!=0){
+        if(name!=null)
+            console.log(`err in ${name} state:${getErrMsg(error)}`)
+        else
+            console.log(`err in job state:${getErrMsg(error)}`)
+        return false
+    }
+    return true
+}
+
+export function isDone(construction){
+    return construction.id != null&&!construction.progressTotal
+}
+
+export function getErrMsg(err){
+    switch (err) {
+        case 0:
+            return 'OK'
+        case -1:
+            return 'ERR_NOT_OWNER'
+        case -2:
+            return 'ERR_NO_PATH'
+        case -3:
+            return 'ERR_NAME_EXISTS'
+        case -4:
+            return 'ERR_BUSY'
+        case -5:
+            return 'ERR_NOT_FOUND'
+        case -6:
+            return 'ERR_NOT_ENOUGH_SOMEONE'
+        case -7:
+            return 'ERR_INVALID_TARGET'
+        case -8:
+            return 'ERR_FULL'
+        case -9:
+            return 'ERR_NOT_IN_RANGE'
+        case -10:
+            return 'ERR_INVALID_ARGS'
+        case -11:
+            return 'ERR_TIRED'
+        case -12:
+            return 'ERR_NO_BODYPART'
+        default:
+            console.log(`Unexpected error code ${err}`)
+            return '???'
+    }
 }

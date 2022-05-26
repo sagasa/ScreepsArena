@@ -13,6 +13,7 @@ import * as util from './utils';
 import * as ep from './enemies';
 import * as cp from './creeps';
 import * as mp from './maps';
+import * as pf from './profiler';
 
 let groupPoint ,isInit
 
@@ -33,7 +34,7 @@ export function update(){
         }
     }
     //matrixAttacker = ep.map.clone()
-
+ 
     cp.myCreeps.forEach(creep=>{
         matrixAttacker.set(creep.x, creep.y,8)
     })
@@ -49,10 +50,7 @@ export function update(){
     })
 
 
-    if(hound&&hound.hitsMax){
-    	hound.update()
-    }else
-    	trySpawnHound(5,creep=>hound=creep)
+    
 
     if(killer&&hound.hitsMax)
     	killer.update()
@@ -62,10 +60,13 @@ export function update(){
     
     healers = healers.filter(creep=>creep.hitsMax)
     healers.forEach(et=>et.update())
-    if(healers.length<2){
+    if(healers.length<30){
         const priority = healers.length<=2 ? 4 : 3
         trySpawnHealer(priority,(creep)=>healers.push(creep))
     }
+
+
+    return
 
     rangedAttackers = rangedAttackers.filter(creep=>creep.hitsMax)
     rangedAttackers.forEach(et=>et.update())
@@ -73,6 +74,11 @@ export function update(){
         const priority = rangedAttackers.length<=2 ? 4 : 3
         trySpawnRangedAttacker(priority,(creep)=>rangedAttackers.push(creep))
     }
+
+    if(hound&&hound.hitsMax){
+    	hound.update()
+    }else
+    	trySpawnHound(5,creep=>hound=creep)
 }
 
 let rangedAttackers = []
@@ -95,20 +101,45 @@ export function trySpawnRangedAttacker(priority,callback){
 			const nearEnemies = ep.soldiers.filter(creep=>getRange(creep,this)<15)
 			let near = this.findClosestByRange(ep.soldiers)
 
+			//近接対策
+			const nearEnemy = ep.attackers.filter(creep=>getRange(creep,this)<15)
+
 			let bad = false
 			let hp = 0
 			let heal = 0
 			nearEnemies.forEach(creep=>{
+				
 				const res = searchPath(creep,{pos:this,range:1},{plainCost:creep.moveTickPlane,swampCost:creep.moveTickSwamp,maxCost:12})
-				visual.text(creep.moveTickSwamp+' '+res.incomplete+' '+res.cost,creep,{font:0.4})
 
-				creep=>creep.body.filter(b=>b.type==HEAL&&0<b.hits).forEach(b=>heal+=12)
+				visual.text(creep.moveTickSwamp+' '+creep.moveTimer+' '+res.cost,creep,{font:0.3})
+
+				creep.body.filter(b=>b.type==HEAL&&0<b.hits).forEach(b=>heal+=12)
+				hp += creep.hits
 				if(res.incomplete==false&&res.cost<11){
 					bad = true
 				}
 			})
 			visual.text(heal+' '+hp,this,{font:0.4})
 
+			let swampOverwrite = null
+			//沼なら
+			const swampId = mp.swampInfo.idMap.get(this.x,this.y)
+			if(swampId!=0&&0<nearEnemies.length){
+				console.log("swampId",swampId)
+				const nearPos = mp.swampInfo.id2Edge[swampId].filter(p=>getRange(this,p)<=3)
+
+				const far = util.getMin1(nearPos,p=>{
+					const nearest = util.getMin1(nearEnemies,creep=>getRange(p,creep))
+					return -getRange(nearest,p)
+				})
+				swampOverwrite = far
+				visual.circle(far,{radius:0.1,opacity:0.6,fill:'#F00000'})
+
+				nearPos.forEach(p=>{
+					util.getMin1(nearEnemies,creep=>getRange(p,creep))
+					visual.circle(p,{radius:0.2,opacity:0.4,fill:'#F00000'})
+				})
+			}
 
 			//ないなら敵スポーン
 			if(near==null)
@@ -119,12 +150,11 @@ export function trySpawnRangedAttacker(priority,callback){
 			const inDanger = nearEnemies.some(creep=>getRange(this,creep)<creep.dangerRadius)
 			const inSafe = nearEnemies.every(creep=>creep.dangerRadius<getRange(this,creep))
 
-			if(!bad){
-				this.moveTo(near,pathProp)
-				visual.line(this,near)
-			}else{
-
-				let rPoint = this.getEscapePos()
+			if(bad){
+				//沼の中を移動する
+				let rPoint = swampOverwrite
+				if(rPoint==null)
+					rPoint = this.getEscapePos()
 				//console.log("back point ",rPoint)
 
 				let epath = findPath(this, rPoint,pathProp)
@@ -136,8 +166,11 @@ export function trySpawnRangedAttacker(priority,callback){
 					prev = epath[i]
 				}
 				
-				this.moveTo(nextMove,pathProp)
+				this.moveTo(nextMove,pathProp,{color:'#F00000'})
 				visual.line(this,rPoint,{color:'#0000F0',lineStyle:'dotted',opacity:0.2})
+			}else if(3<getRange(near,this)){
+				this.moveTo(near,pathProp)
+				visual.line(this,near,{color:'#00F000'})
 			}
 			//console.log(matrixAttacker.get(this.x,this.y))
 			
@@ -166,7 +199,7 @@ let healers = []
 export function trySpawnHealer(priority,callback){
 	entrySpawn([MOVE,MOVE,MOVE,HEAL,HEAL,HEAL],priority,creep=>{
 		creep.update = function(){
-	        
+	        this.moveTo({x:50,y:50})
 	    }
 		callback(creep)
 	})
@@ -282,7 +315,8 @@ export function trySpawnHound(priority,callback){
 
 //逃走経路算出creepをthisとする
 let calcEscapePos = function(){
-	 let visual = new Visual(0,false)
+	const sec = pf.section("calcEscapePos",'#F00000')
+	let visual = new Visual(0,false)
 	//敵位置算出
 	const nearEnemies = ep.soldiers.filter(creep=>getRange(creep,this)<10)
 	let enemyPos = {x:this.x,y:this.y}
@@ -308,8 +342,8 @@ let calcEscapePos = function(){
 		console.log("calc next shield")
 		let minScore = 200
 		let minId
-		mp.bigIds.forEach(id=>{
-			const pos = mp.id2Center[id]
+		mp.wallInfo.bigIds.forEach(id=>{
+			const pos = mp.wallInfo.id2Center[id]
 
 			//危険度のスコア化
 	    	//ベクトル化
@@ -350,15 +384,15 @@ let calcEscapePos = function(){
 
 	//撤退位置の算出
 	const backId = this.currentShield
-   	visual.circle(mp.id2Center[backId],{radius:0.2,opacity:0.4,fill:'#00F000'})
+   	visual.circle(mp.wallInfo.id2Center[backId],{radius:0.2,opacity:0.4,fill:'#00F000'})
    	let rPoint = {x:50,y:50}
-	const convexRange = mp.getRangeConvex(backId,this)
+	const convexRange = mp.wallInfo.getRangeConvex(backId,this)
 
 	//触れているなら
 	if(convexRange.dist<=1){
 
-		const a = mp.getPointConvex(backId,convexRange.pos+0.2)
-		const b = mp.getPointConvex(backId,convexRange.pos+0.8)
+		const a = mp.wallInfo.getPointConvex(backId,convexRange.pos+0.2)
+		const b = mp.wallInfo.getPointConvex(backId,convexRange.pos+0.8)
 		//convexRange.pos
 		const va = {x:a.x-this.x,y:a.y-this.y}
 		const vb = {x:b.x-this.x,y:b.y-this.y}
@@ -379,7 +413,7 @@ let calcEscapePos = function(){
         //console.log("次の移動位置")
 	}else{
 		//接点の中で最も安全なものを
-		rPoint = util.getMin(mp.getTangentConvex(backId,this),(a,b)=>{
+		rPoint = util.getMin(mp.wallInfo.getTangentConvex(backId,this),(a,b)=>{
 			const va = {x:a.x-this.x,y:a.y-this.y}
 			const vb = {x:b.x-this.x,y:b.y-this.y}
             const v0 = {x:enemyPos.x-this.x,y:enemyPos.y-this.y}
@@ -391,6 +425,7 @@ let calcEscapePos = function(){
 		})
 		//console.log("最良の接点",convexRange.dist)
 	}
+	sec.end()
 	return rPoint
 }
 
