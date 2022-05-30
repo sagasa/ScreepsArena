@@ -12,6 +12,8 @@ import * as util from './utils';
 import {Visual} from '/game/visual';
 import * as pf from './profiler';
 
+let DEBUG = false
+
 let constructionSites
 
 let allContaineRresources
@@ -20,7 +22,8 @@ let neutralContaineResources
 let staticContaineResources
 let startContaineResources
 
-let emptyExtensions
+let energyCache
+let emptyEnergyCache
 
 let extensions
 
@@ -39,7 +42,7 @@ export function update(){
         isInit=true;
     }
 
-    extensions = cp.ownedStructures.filter(str=>str.my&&str instanceof StructureExtension&&str.store.energy<100)
+    extensions = cp.ownedStructures.filter(str=>str.my&&str instanceof StructureExtension)
 
     //すべてのリソースコンテナ
     allContaineRresources = getObjectsByPrototype(StructureContainer).filter(rc=>rc.x!=null)
@@ -60,13 +63,10 @@ export function update(){
     
     let visual = new Visual(0,false)
     
-    startContaineResources.forEach(rc=>{
-        visual.circle(rc)
-    })
-
     //リソースキャッシュを作成
-    emptyExtensions = staticContaineResources.filter(rc=>rc.findInRange(extensions, 3).some(ex=>ex.store.energy<20))
-
+    energyCache = staticContaineResources.filter(rc=>rc.isCache)
+    emptyEnergyCache = energyCache.filter(rc=>0<rc.store.getUsedCapacity(RESOURCE_ENERGY)&&rc.findInRange(extensions, EXTENSION_RANGE).some(ex=>ex.store.energy<20))
+    //console.log("isCache",energyCache.length)
 
     for(let y = 0; y < 100; y++) {
         for(let x = 0; x < 100; x++) {
@@ -74,7 +74,7 @@ export function update(){
         }
     } 
     cp.ownedStructures.forEach(os=>{
-        if(!(os instanceof StructureContainer)){
+        if(!(os instanceof StructureContainer||os instanceof StructureRampart)){
             matrixWorker.set(os.x, os.y, 20)
         }
     })
@@ -85,42 +85,53 @@ export function update(){
         matrixWorker.set(cs.x, cs.y, 20)
     })
     
-    pf.lap('workerInfo','#008000') 
+    
     energyTransporters = energyTransporters.filter(creep=>creep.hitsMax)
     energyTransporters.forEach(et=>et.update())
     if(energyTransporters.length<2){
-        const priority = energyTransporters.length<=2 ? 10 : 3
+        const priority = 10
         trySpawnEnergyTransporter(priority,(creep)=>energyTransporters.push(creep))
     }
-    pf.lap('ET','#80FF00')
+   // pf.lap('ET','#80FF00')
     energyCollectors = energyCollectors.filter(creep=>creep.hitsMax)
     energyCollectors.forEach(et=>et.update())
-    if(energyCollectors.length<1){
-        const priority = 5
+    if(energyCollectors.length<2){
+        const priority = 6
         trySpawnEnergyCollector(priority,(creep)=>energyCollectors.push(creep))
     }
-    pf.lap('EC','#F0FF00')
+    
 }
 
+const EXTENSION_RANGE = 8
 
 const matrixWorker = new CostMatrix
 
 //=== エネルギー搬送 ===
 
 function findRresourcesET(pos){
+    let resources
+    //スポーン地点のコンテナが残っているか
     if(0<startContaineResources.length){
-        const resources = startContaineResources.map(resource=>{
-            return {object:resource,harvestTime:resource.ticksToDecay-searchPath(pos, resource,pathEnergyTransporter).cost}
-        })
-        const res = getMin(resources,(a,b)=>a.cost-b.cost)
-        return res==null ? null : res.object
+        resources = startContaineResources
     }else{
-        const resources = emptyExtensions.map(resource=>{
-            return {object:resource,cost:searchPath(pos, resource,pathEnergyTransporter).cost}
-        })
-        const res = getMin(resources,(a,b)=>a.cost-b.cost)
-        return res==null ? null : res.object
+        resources = emptyEnergyCache
     }
+    
+    /*
+    //別のワーカーがターゲットしていて自分のほうが遠いものを除外
+    const otherET = energyTransporters.filter(ec=>ec.id!=creep.id)
+    if(0<otherEC.length)
+        resources = resources.filter(rc=>!otherET.some(other=>other.target!=null&&other.target.object.id==rc.id&&rinfo.harvestTime<=other.target.harvestTime))
+
+    //仮
+    let max = getMin(resources,(a,b)=>b.harvestTime-a.harvestTime)
+    //競合していて距離が自分より遠いワーカーに再計算フラグを
+    otherEC.filter(other=>other.target!=null&&other.target.object.id==max.object.id&&other.target.harvestTime<max.harvestTime)
+        .forEach(other=>other.conflict = true)
+    //*/
+
+    const res = util.getMin1(resources,(rc)=>getRange(pos,rc))
+    return res
 }
 
 function findDumpET(pos){
@@ -128,10 +139,15 @@ function findDumpET(pos){
 }
 
 function findStoreET(pos){
-    const stores = extensions.concat([mySpawn]).map(resource=>{
+    const stores = extensions
+        .filter(ext=>0<ext.store.getFreeCapacity(RESOURCE_ENERGY))
+        .concat([mySpawn])
+        .filter(ext=>getRange(pos,ext)<=EXTENSION_RANGE)
+        .map(resource=>{
             return {object:resource,cost:searchPath(pos, resource,pathEnergyTransporter).cost}
         })
-    return getMin(stores,(a,b)=>a.cost-b.cost).object
+        const res = getMin(stores,(a,b)=>a.cost-b.cost)
+    return res==null?null:res.object
 }
 
 let moveEX = function(pos,costMatrix=null){
@@ -147,6 +163,8 @@ const ET_STATE_LOAD = 0;
 const ET_STATE_UNLOAD = 1;
 const ET_STATE_MOVE = 2;
 
+const ET_CARRY_SIZE = 100
+
 const pathEnergyTransporter = {plainCost:1,swampCost:1,costMatrix:matrixWorker}
 
 export function trySpawnEnergyTransporter(priority,callback){
@@ -158,86 +176,78 @@ export function trySpawnEnergyTransporter(priority,callback){
             if(this.hits==null)
                 return
 
-            if(this.state==ET_STATE_LOAD&&0<this.store.getUsedCapacity(RESOURCE_ENERGY)){
-                this.state=ET_STATE_UNLOAD;
-                this.et_to = findStoreET(this)
-            }
+            let from = findRresourcesET(this)
+            let to = findStoreET(this)                
 
-            if(this.state == ET_STATE_UNLOAD){
-                if(this.store.getUsedCapacity()<=0){
-                    this.state=ET_STATE_LOAD
-                    this.et_from = findRresourcesET(this)
-                }else if(4<getRange(this,this.et_to)&&startContaineResources.length<=0){
-                    this.state=ET_STATE_MOVE
-                    this.et_to = findDumpET(this)
+            if(from==null){
+                //渡す先がない
+                if(DEBUG)console.log("ET target lost from")
+                return
+            }else{
+                if(DEBUG)console.log(`ET from[${from.x}, ${from.y}]`)
+            }
+            if(to!=null)
+                if(DEBUG)console.log(`to[${to.x}, ${to.y}]`)
+            
+            if(this.state == ET_STATE_LOAD){
+                //full or 引き出しに成功
+                if(this.store.getFreeCapacity(RESOURCE_ENERGY)<=0||util.tryJob(this.withdraw(from,RESOURCE_ENERGY),'withdraw',DEBUG)){
+                    this.state=ET_STATE_UNLOAD
+                    this.moveTo(to,pathEnergyTransporter)
+                }else{
+                    this.moveTo(from,pathEnergyTransporter)
+                }
+            }else if(this.state == ET_STATE_UNLOAD){
+                if(to==null){
+                    if(DEBUG)console.log("ET target lost to")
+                    to = findDumpET(this)
+                }
+
+                //empty or 移送に成功
+                const amount = Math.min(to.store.getFreeCapacity(RESOURCE_ENERGY),this.store.getUsedCapacity(RESOURCE_ENERGY))
+                if(this.store.getUsedCapacity(RESOURCE_ENERGY)<=0||util.tryJob(this.transfer(to,RESOURCE_ENERGY,amount),'transfer',DEBUG)){
+                    //空になるなら
+                    if(this.store.getUsedCapacity(RESOURCE_ENERGY)<=to.store.getFreeCapacity(RESOURCE_ENERGY)){
+                        this.state=ET_STATE_LOAD
+                        this.moveTo(from,pathEnergyTransporter)    
+                    }else{
+                        if(DEBUG)console.log("????????????")
+                    }
+                }else{
+                    this.moveTo(to,pathEnergyTransporter)
                 }
             }
-
-            if(this.state==ET_STATE_MOVE&&this.store.getUsedCapacity()<=0){
-                this.state=ET_STATE_LOAD
-                this.et_from = findRresourcesET(this)
-            }
-
-            console.log("state ",this.state)
-            if(this.et_from)
-                console.log("from ",this.et_from.x,this.et_from.y)
-            if(this.et_to)
-                console.log("to ",this.et_to.x,this.et_to.y)
-
-            if(this.state==ET_STATE_MOVE){
-                if(this.et_to==null||this.et_to.store==null||this.et_to.store.getFreeCapacity()<=0)
-                    this.et_to = findDumpET(this)
-                if(this.transfer(this.et_to,RESOURCE_ENERGY)==ERR_NOT_IN_RANGE){
-                    const sp = searchPath(this, {pos:this.et_to,range:1}, pathEnergyTransporter)
-                    console.log(sp.path[0],matrixWorker.get(sp.path[0].x,sp.path[0].y))
-                    this.moveTo(sp.path[0],pathEnergyTransporter)
-                    //this.moveTo(this.et_to,pathEnergyTransporter)
-                }
-            }
-
-            if(this.state==ET_STATE_LOAD){
-                if(this.et_from==null||this.et_from.store==null||this.et_from.store.energy<=0)
-                    this.et_from = findRresourcesET(this)
-
-                if(this.withdraw(this.et_from,RESOURCE_ENERGY)==ERR_NOT_IN_RANGE){
-                    const sp = searchPath(this, {pos:this.et_from,range:1}, pathEnergyTransporter)
-                    console.log(sp.path[0],sp.path.length,matrixWorker.get(sp.path[0].x,sp.path[0].y))
-                    this.moveTo(sp.path[0],pathEnergyTransporter)
-                }
-            }
-
-            if(this.state == ET_STATE_UNLOAD){
-                if(this.et_to==null||this.et_to.store==null||0<this.et_to.store.energy)
-                    this.et_to = findStoreET(this)
-                if(this.transfer(this.et_to,RESOURCE_ENERGY)==ERR_NOT_IN_RANGE){
-                    const sp = searchPath(this, {pos:this.et_to,range:1}, pathEnergyTransporter)
-                    console.log(sp.path[0],sp.path.length,matrixWorker.get(sp.path[0].x,sp.path[0].y))
-                    this.moveTo(sp.path[0],pathEnergyTransporter)
-                    //this.moveTo(this.et_to,pathEnergyTransporter)
-                }
-            }
+            //util.tryJob(this.withdraw(from,RESOURCE_ENERGY),'withdraw')
+            //util.tryJob(this.transfer(to,RESOURCE_ENERGY),'transfer')
         }
 
         callback(creep)
     })
 }
 
+
 //=== エネルギー確保 ===
 
-function findRresourcesEC(pos){
-    
-    const resources = neutralContaineResources.map(resource=>{
-        return {object:resource,harvestTime:resource.ticksToDecay-searchPath(pos, resource,pathEnergyCollector).cost}
+function findRresourcesEC(creep){
+    let resources = neutralContaineResources.map(resource=>{
+        return {object:resource,harvestTime:resource.ticksToDecay-searchPath(creep, resource,pathEnergyCollector).cost}
     })
-    return getMin(resources,(a,b)=>b.harvestTime-a.harvestTime)
+    //別のワーカーがターゲットしていて自分のほうが遠いものを除外
+    const otherEC = energyCollectors.filter(ec=>ec.id!=creep.id)
+    if(0<otherEC.length)
+        resources = resources.filter(rinfo=>!otherEC.some(other=>other.target!=null&&other.target.object.id==rinfo.object.id&&rinfo.harvestTime<=other.target.harvestTime))
+
+    //仮
+    let max = getMin(resources,(a,b)=>b.harvestTime-a.harvestTime)
+    //競合していて距離が自分より遠いワーカーに再計算フラグを
+    otherEC.filter(other=>other.target!=null&&other.target.object.id==max.object.id&&other.target.harvestTime<max.harvestTime)
+        .forEach(other=>other.conflict = true)
+    return max
 }
 
-const EC_STATE_MAKE_TANK = 0
 const EC_STATE_WORK = 1
 const EC_STATE_DISCHARGE = 2
-const EC_STATE_TRANSFER = 1
-const EC_STATE_MAKE_EXT = 2
-const EC_STATE_MOVE = 3
+const EC_STATE_MOVE = 0
 
 const pathEnergyCollector = {plainCost:1,swampCost:2,costMatrix:matrixWorker}
 
@@ -248,6 +258,7 @@ export function trySpawnEnergyCollector(priority,callback){
         creep.state = EC_STATE_MOVE
         creep.constructions = []
         creep.extensions = []
+        creep.conflict = false
 
 
         creep.update = function(){
@@ -255,14 +266,14 @@ export function trySpawnEnergyCollector(priority,callback){
             
             //console.log("decay",target.ticksToDecay,"state",this.state,"=",target.x,target.y)
 
-            console.log("state",this.state)
+            //console.log("state",this.state)
             
             if(this.state == EC_STATE_MOVE){
                 this.doMove()
             }else if(this.state == EC_STATE_WORK){
                 this.doWork()
             }else if(this.state == EC_STATE_DISCHARGE){
-                util.tryJob(this.transfer(this.container,RESOURCE_ENERGY),'transfer')
+                util.tryJob(this.transfer(this.container,RESOURCE_ENERGY),'transfer',DEBUG)
                 this.state = EC_STATE_MOVE
                 this.target = findRresourcesEC(this)
                 this.doMove()
@@ -273,7 +284,7 @@ export function trySpawnEnergyCollector(priority,callback){
         //今のtickでtransferができるならinstant
         creep.transitDischarge = function(instant){
             //空か移動に成功したなら
-            if(this.store.getUsedCapacity()<=0||(instant&&util.tryJob(this.transfer(this.container,RESOURCE_ENERGY),'transfer'))){
+            if(this.store.getUsedCapacity()<=0||(instant&&util.tryJob(this.transfer(this.container,RESOURCE_ENERGY),'transfer',DEBUG))){
                 this.state = EC_STATE_MOVE
                 this.target = findRresourcesEC(this)
                 this.doMove()
@@ -283,37 +294,52 @@ export function trySpawnEnergyCollector(priority,callback){
         }
 
         creep.doMove = function(){
-            if(this.target==null||this.target.harvestTime<20&&getTicks()%50==1||this.target.object.store==null)
+            if(this.conflict||this.target==null||this.target.harvestTime<20&&getTicks()%50==1||this.target.object.store==null){
+                this.conflict = false
                 this.target = findRresourcesEC(this)
+            }
 
-            const target = this.target.object
-
-            if(!target.store){
-                console.log("err container not found")
+            if(this.target==null||!this.target.object.store){
+                if(DEBUG)console.log("err container not found")
                 return
             }
+
+            const target = this.target.object
             
-            if(this.withdraw(target,RESOURCE_ENERGY)!=ERR_NOT_IN_RANGE){
+            if(!this.withdraw(target,RESOURCE_ENERGY)){
                 //到着
                 this.state = EC_STATE_WORK
                 this.container = null
                 this.extensions = []
                 this.constructions.forEach(cs=>cs.remove())
                 this.constructions = []
+                
+                const nearCache = this.findInRange(extensions,EXTENSION_RANGE).filter((rc)=>{
+                    const res = searchPath(this,rc,{plainCost:1,swampCost:5,maxCost:EXTENSION_RANGE})
+                    if(DEBUG)console.log("search chche",rc.x,rc.y," ",res.cost,res.incomplete)
+                    return !res.incomplete
+                }).length
+                if(DEBUG)console.log("near cache",nearCache)
 
                 //コンテナ
                 util.tryCreateConstructionSite(this,StructureContainer,obj=>this.constructions.push(obj))
                 //防壁
                 util.tryCreateConstructionSite(this,StructureRampart,obj=>this.constructions.push(obj))
-                //エクステンション
-                for(let dir = 1; dir <= 8; dir+=2) {
-                    util.tryCreateConstructionSite(move(this,dir),StructureExtension,obj=>this.constructions.push(obj))
+                //近くにないなら
+                if(nearCache<4){
+                    let makeCount = Math.min(4,4-nearCache)
+                    //エクステンション
+                    for(let dir = 1; dir <= 8 && 0 < makeCount; dir+=2) {
+                        util.tryCreateConstructionSite(move(this,dir),StructureExtension,obj=>this.constructions.push(obj))
+                        makeCount --
+                    }
                 }
+                    
 
                 this.doWork()
             }else{
                 const path = searchPath(this, target,pathEnergyCollector)
-                console.log("decay",target.ticksToDecay,"path",path.cost,"=",target.ticksToDecay-path.cost,path.path[0])
+                if(DEBUG)console.log("decay",target.ticksToDecay,"path",path.cost,"=",target.ticksToDecay-path.cost,path.path[0])
                 this.moveTo(target,pathEnergyCollector);
             }
         }
@@ -329,6 +355,7 @@ export function trySpawnEnergyCollector(priority,callback){
                     const name = finish.constructor.name
                     //コンテナできたら格納
                     if(name=='StructureContainer'){
+                        finish.isCache = true
                         this.container = finish
                     }else if(name=='StructureExtension'){
                         this.extensions.push(finish)
@@ -341,8 +368,7 @@ export function trySpawnEnergyCollector(priority,callback){
             if(target.store==null||target.store.getUsedCapacity()<=0){
                 from = this.container
                 to = this.extensions.find(ex=>{
-                    const cap = 0<ex.store.getFreeCapacity(RESOURCE_ENERGY)
-                    return cap
+                    return ex.hits!=null&&0<ex.store.getFreeCapacity(RESOURCE_ENERGY)
                 })
             }else{
                 //自然沸きがのこっているなら
@@ -356,11 +382,11 @@ export function trySpawnEnergyCollector(priority,callback){
             //エネルギーを移す先があるなら
             if(to!=null){
                 if(30<this.store.getFreeCapacity(RESOURCE_ENERGY)&&this.store.getUsedCapacity(RESOURCE_ENERGY)<to.store.getFreeCapacity(RESOURCE_ENERGY)){
-                    if(util.tryJob(this.withdraw(from,RESOURCE_ENERGY),'withdraw'))
+                    if(util.tryJob(this.withdraw(from,RESOURCE_ENERGY),'withdraw',DEBUG))
                         doWithdraw = true
                 }else{
                     const amount = Math.min(this.store.getUsedCapacity()-30,to.store.getFreeCapacity(RESOURCE_ENERGY))
-                    if(util.tryJob(this.transfer(to,RESOURCE_ENERGY,amount),'transfer'))
+                    if(util.tryJob(this.transfer(to,RESOURCE_ENERGY,amount),'transfer',DEBUG))
                         doBuildOrTransfer = true
                 }
             }
@@ -369,19 +395,19 @@ export function trySpawnEnergyCollector(priority,callback){
             if(0 < this.constructions.length){
                 //まだあるなら
                 if(this.store.getUsedCapacity()<115)
-                    if(util.tryJob(this.withdraw(from,RESOURCE_ENERGY),'withdraw'))
+                    if(util.tryJob(this.withdraw(from,RESOURCE_ENERGY),'withdraw',DEBUG))
                         doWithdraw = true
                 if(!doBuildOrTransfer){
-                    if(util.tryJob(this.build(this.constructions[0]),'build'))
+                    if(util.tryJob(this.build(this.constructions[0]),'build',DEBUG))
                         doBuildOrTransfer = true
                 }
 
                 //エネルギー
-                if(this.store.getUsedCapacity() < 15&&from.store.getUsedCapacity() < 15){
+                if(this.store.getUsedCapacity() < 15&&(from==null||from.store==null||from.store.getUsedCapacity() < 15)){
 
                     this.state = EC_STATE_MOVE
                     this.target = findRresourcesEC(this)
-                    console.log("break")
+                    if(DEBUG)console.log("break")
                 }
 
 
@@ -389,110 +415,6 @@ export function trySpawnEnergyCollector(priority,callback){
                 //これで終わりなら
                 this.transitDischarge(!doBuildOrTransfer&&!doWithdraw)
             }   
-        }
-        callback(creep)
-    })
-}
-
-export function trySpawnEnergyCollector0(priority,callback){
-    entrySpawn([WORK,WORK,WORK,MOVE,MOVE,MOVE,MOVE,MOVE,MOVE,MOVE,MOVE,CARRY,CARRY,CARRY,CARRY,CARRY,CARRY],priority,(creep)=>{
-
-        creep.target = findRresourcesEC(creep)
-        creep.state = EC_STATE_MOVE
-        creep.update = function(){
-
-            if(this.state == EC_STATE_MOVE&&(this.target==null||this.target.harvestTime<20&&getTicks()%50==1||this.target.object.store==null))
-                this.target = findRresourcesEC(this)
-
-            const target = this.target.object
-            
-            //console.log("decay",target.ticksToDecay,"state",this.state,"=",target.x,target.y)
-
-            //到着したら
-            if(this.state == EC_STATE_MOVE){
-                if(!target.store)
-                    return
-                const path = searchPath(this, target,pathEnergyCollector)
-                this.moveTo(target,pathEnergyCollector);
-
-                console.log("decay",target.ticksToDecay,"path",path.cost,"=",target.ticksToDecay-path.cost,path.path[0])
-                if(this.withdraw(target,RESOURCE_ENERGY,RESOURCE_ENERGY)!=ERR_NOT_IN_RANGE){
-                    this.state = EC_STATE_MAKE_TANK
-                    this.construction = null
-                }
-            }
-            if(this.state == EC_STATE_MAKE_TANK){
-                if(!this.construction){
-                    const res = createConstructionSite(this,StructureContainer)
-                    this.construction = res.object
-                    if(res.error)
-                        console.log("error in createConstructionSite ",res.error)
-                }else if(!this.construction.progressTotal){
-                    
-                    this.state = EC_STATE_TRANSFER
-                    this.container = this.construction.structure
-                    this.construction = null
-                }
-                if(this.construction){
-                    this.build(this.construction)
-                    
-                }
-            }
-            if(this.state == EC_STATE_TRANSFER){
-                if(0<this.store.getFreeCapacity()){
-                    if(!target.store||target.store.getUsedCapacity()<=0){
-                        this.state = EC_STATE_MAKE_EXT
-                        return
-                    }
-                    this.withdraw(target,RESOURCE_ENERGY)
-                }else{
-                    this.transfer(this.container,RESOURCE_ENERGY)
-                }
-            }
-            if(this.state == EC_STATE_MAKE_EXT){
-                
-                console.log(!this.construction,this.container.store.getUsedCapacity())
-                if(!this.construction){
-                    if(this.container.store.getUsedCapacity()<400){
-                        //建設していない+残りエネルギーが少ないならステート終了
-                        this.state = EC_STATE_MOVE
-                        this.target = findRresourcesEC(this)
-                        this.transfer(this.container,RESOURCE_ENERGY)
-                        return
-                    }else{
-                        //建設を試みる
-                        for(let dir = 1; dir <= 8; dir+=2) {
-                            const res = createConstructionSite(move(this,dir),StructureExtension)
-                            if(!res.error){
-                                this.construction = res.object
-                                break
-                            }
-                        }
-                        //失敗したらステート終了
-                        if(!this.construction){
-                            this.state = EC_STATE_MOVE
-                            this.target = findRresourcesEC(this)
-                            this.transfer(this.container,RESOURCE_ENERGY)
-                            return 
-                        }
-                    }
-                }else{
-                    if(this.construction.progressTotal){
-                        //建設中なら
-                        if(this.store.getUsedCapacity()<15)
-                            this.withdraw(this.container,RESOURCE_ENERGY)
-                        this.build(this.construction)
-                    }else{
-                        //建設後にエネルギーを詰める
-                        if(this.store.getUsedCapacity()<100)
-                            this.withdraw(this.container,RESOURCE_ENERGY)
-
-                        this.transfer(this.construction.structure,RESOURCE_ENERGY)
-                        if(this.construction.structure.store.getFreeCapacity()<=0)
-                            this.construction = null                
-                    }   
-                }
-            }
         }
         callback(creep)
     })

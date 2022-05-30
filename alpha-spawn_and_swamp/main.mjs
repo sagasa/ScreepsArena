@@ -42,7 +42,6 @@ export function loop() {
     pf.lap('updateAattackers','#F00000')    
 
     trySpawn()
-
-    pf.lap('end','#00FFFF')
+    
     pf.end()
 }

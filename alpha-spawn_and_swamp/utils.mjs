@@ -256,13 +256,13 @@ export function tryCreateConstructionSite(pos,type,callback){
 }
 
 //エラーコードが0以外ならログを出してfalseを返す
-export function tryJob(error,name){
+export function tryJob(error,name,debug = true){
     
     if(error!=0){
         if(name!=null)
-            console.log(`err in ${name} state:${getErrMsg(error)}`)
+            if(debug)console.log(`err in ${name} state:${getErrMsg(error)}`)
         else
-            console.log(`err in job state:${getErrMsg(error)}`)
+            if(debug)console.log(`err in job state:${getErrMsg(error)}`)
         return false
     }
     return true

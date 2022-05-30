@@ -52,7 +52,7 @@ export function update(){
 
     
 
-    if(killer&&hound.hitsMax)
+    if(killer&&killer.hitsMax)
     	killer.update()
     else if(0<ep.workers.length)
     	trySpawnKiller(4,creep=>killer=creep)
@@ -60,25 +60,26 @@ export function update(){
     
     healers = healers.filter(creep=>creep.hitsMax)
     healers.forEach(et=>et.update())
-    if(healers.length<30){
-        const priority = healers.length<=2 ? 4 : 3
+
+    healers.forEach((creep,i)=>creep.moveTo({x:12,y:30+i}))
+    if(healers.length<20){
+        const priority = 3.98-healers.length*0.05
         trySpawnHealer(priority,(creep)=>healers.push(creep))
     }
 
 
-    return
 
     rangedAttackers = rangedAttackers.filter(creep=>creep.hitsMax)
     rangedAttackers.forEach(et=>et.update())
-    if(rangedAttackers.length<2){
-        const priority = rangedAttackers.length<=2 ? 4 : 3
+    if(rangedAttackers.length<20){
+        const priority = 4-rangedAttackers.length*0.05
         trySpawnRangedAttacker(priority,(creep)=>rangedAttackers.push(creep))
     }
 
     if(hound&&hound.hitsMax){
     	hound.update()
     }else
-    	trySpawnHound(5,creep=>hound=creep)
+    	trySpawnHound(8,creep=>hound=creep)
 }
 
 let rangedAttackers = []
@@ -136,7 +137,6 @@ export function trySpawnRangedAttacker(priority,callback){
 				visual.circle(far,{radius:0.1,opacity:0.6,fill:'#F00000'})
 
 				nearPos.forEach(p=>{
-					util.getMin1(nearEnemies,creep=>getRange(p,creep))
 					visual.circle(p,{radius:0.2,opacity:0.4,fill:'#F00000'})
 				})
 			}
@@ -199,7 +199,7 @@ let healers = []
 export function trySpawnHealer(priority,callback){
 	entrySpawn([MOVE,MOVE,MOVE,HEAL,HEAL,HEAL],priority,creep=>{
 		creep.update = function(){
-	        this.moveTo({x:50,y:50})
+			
 	    }
 		callback(creep)
 	})

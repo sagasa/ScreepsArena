@@ -322,12 +322,15 @@ class SwampData extends MapData{
 export let wallInfo = new WallData()
 export let swampInfo = new SwampData()
 
+let isInit = false
+
 export function update(){
+    if(isInit)
+        return
+    isInit = true
+
     wallInfo.update()
     swampInfo.update()
-
-	let visual = new Visual(0,false)
-
 }
 
 
