@@ -99,14 +99,18 @@ class WallData extends MapData{
         this.id2Center = []
 
         this.bigIds = []
+        this.Id4RangedAttack = []
+        this.Id4Attack = []
         this.allIds = []
+        this.visual = new Visual(0,true)
+
     }
 
     update(){
+        const visual = this.visual
+        visual.clear()
         this.makeIdMap()
 
-
-        let visual = new Visual(0,false)
         //外周以外
         for(let id = 2; id < this.id2AllPos.length; id++) {
              
@@ -236,9 +240,13 @@ class SwampData extends MapData{
 
         this.bigIds = []
         this.allIds = []
+        this.visual = new Visual(0,true)
     }
 
     update(){
+        const visual = this.visual
+        visual.clear()
+
         this.makeIdMap()
 
         //1マス内側に
@@ -258,7 +266,7 @@ class SwampData extends MapData{
         }
         this.makeIdMap(pos=>map.get(pos.x,pos.y)!=0)
 
-        let visual = new Visual(0,false)
+        
         //外周以外
         for(let id = 1; id < this.id2AllPos.length; id++) {
              

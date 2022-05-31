@@ -35,7 +35,7 @@ export function update(){
     }
     //matrixAttacker = ep.map.clone()
  
-    cp.myCreeps.forEach(creep=>{
+    cp.creeps.forEach(creep=>{
         matrixAttacker.set(creep.x, creep.y,8)
     })
     ep.creeps.forEach(creep=>{
@@ -59,19 +59,26 @@ export function update(){
 
     
     healers = healers.filter(creep=>creep.hitsMax)
-    healers.forEach(et=>et.update())
+    rangedAttackers = rangedAttackers.filter(creep=>creep.hitsMax)
 
-    healers.forEach((creep,i)=>creep.moveTo({x:12,y:30+i}))
-    if(healers.length<20){
+    
+    //ペアを設定
+    healers.forEach((creep,i)=>{
+    	if(i < rangedAttackers.length)
+    		creep.pair = rangedAttackers[i]
+    	else
+    		creep.pair = null
+    })
+
+    healers.forEach(et=>et.update())
+    rangedAttackers.forEach(et=>et.update())
+
+    if(healers.length<0){
         const priority = 3.98-healers.length*0.05
         trySpawnHealer(priority,(creep)=>healers.push(creep))
     }
-
-
-
-    rangedAttackers = rangedAttackers.filter(creep=>creep.hitsMax)
-    rangedAttackers.forEach(et=>et.update())
-    if(rangedAttackers.length<20){
+    
+    if(rangedAttackers.length<0){
         const priority = 4-rangedAttackers.length*0.05
         trySpawnRangedAttacker(priority,(creep)=>rangedAttackers.push(creep))
     }
@@ -84,7 +91,8 @@ export function update(){
 
 let rangedAttackers = []
 export function trySpawnRangedAttacker(priority,callback){
-	entrySpawn([MOVE,MOVE,MOVE,MOVE,MOVE,RANGED_ATTACK,RANGED_ATTACK,RANGED_ATTACK,RANGED_ATTACK,RANGED_ATTACK],priority,creep=>{
+	//[MOVE,MOVE,MOVE,MOVE,MOVE,RANGED_ATTACK,RANGED_ATTACK,RANGED_ATTACK,RANGED_ATTACK,RANGED_ATTACK]
+	entrySpawn([MOVE,MOVE,MOVE,MOVE,MOVE,MOVE,MOVE,RANGED_ATTACK,RANGED_ATTACK,RANGED_ATTACK,RANGED_ATTACK],priority,creep=>{
 
 		creep.update = function(){
 
@@ -96,6 +104,9 @@ export function trySpawnRangedAttacker(priority,callback){
 			const otherCount = this.body.filter(b=>b.type!=MOVE&&0<b.hits).length
 			const moveTickSwamp = Math.ceil(otherCount/moveCount*5)
 			const moveTickPlane = Math.ceil(otherCount/moveCount)
+			const moveTimer = Math.ceil(this.fatigue / moveCount / 2)
+
+			const escapeTick = moveTickSwamp * 2 + 1 + moveTimer
 			const pathProp = {plainCost:moveTickPlane,swampCost:moveTickSwamp,costMatrix:matrixAttacker}
 
 			//敵位置算出
@@ -103,24 +114,24 @@ export function trySpawnRangedAttacker(priority,callback){
 			let near = this.findClosestByRange(ep.soldiers)
 
 			//近接対策
-			const nearEnemy = ep.attackers.filter(creep=>getRange(creep,this)<15)
+			const nearEAttakcers = ep.attackers.filter(creep=>getRange(creep,this)<15)
 
 			let bad = false
 			let hp = 0
 			let heal = 0
-			nearEnemies.forEach(creep=>{
-				
+			const contactTick = nearEAttakcers.reduce((min,creep)=>{
 				const res = searchPath(creep,{pos:this,range:1},{plainCost:creep.moveTickPlane,swampCost:creep.moveTickSwamp,maxCost:12})
+				if(res.incomplete)
+					return min
+				//visual.text(creep.moveTickSwamp+' '+creep.moveTimer+' '+costStr,creep,{font:0.3})
+				return Math.min(res.cost + creep.moveTimer,min)
+			},100)
 
-				visual.text(creep.moveTickSwamp+' '+creep.moveTimer+' '+res.cost,creep,{font:0.3})
-
+			nearEnemies.forEach(creep=>{
 				creep.body.filter(b=>b.type==HEAL&&0<b.hits).forEach(b=>heal+=12)
 				hp += creep.hits
-				if(res.incomplete==false&&res.cost<11){
-					bad = true
-				}
 			})
-			visual.text(heal+' '+hp,this,{font:0.4})
+			visual.text(heal+' '+hp+' '+moveTimer,this,{font:0.4})
 
 			let swampOverwrite = null
 			//沼なら
@@ -150,25 +161,25 @@ export function trySpawnRangedAttacker(priority,callback){
 			const inDanger = nearEnemies.some(creep=>getRange(this,creep)<creep.dangerRadius)
 			const inSafe = nearEnemies.every(creep=>creep.dangerRadius<getRange(this,creep))
 
-			if(bad){
+			if(contactTick<escapeTick){
 				//沼の中を移動する
 				let rPoint = swampOverwrite
 				if(rPoint==null)
 					rPoint = this.getEscapePos()
-				//console.log("back point ",rPoint)
+				console.log("back point ",rPoint)
 
 				let epath = findPath(this, rPoint,pathProp)
 				let nextMove = epath[0]
 				
 				let prev = this
+				visual.line(this,rPoint,{color:'#0000FF',opacity:0.6,width:0.03})
 				for (var i = 0; i < epath.length&&i<5; i++) {
-					visual.line(prev,epath[i],{color:'#0000F0',opacity:0.2})
+					visual.line(prev,epath[i],{color:'#0000F0',opacity:0.3,width:0.06})
 					prev = epath[i]
 				}
 				
 				this.moveTo(nextMove,pathProp,{color:'#F00000'})
-				visual.line(this,rPoint,{color:'#0000F0',lineStyle:'dotted',opacity:0.2})
-			}else if(3<getRange(near,this)){
+			}else if(escapeTick+moveTickSwamp*2<contactTick){
 				this.moveTo(near,pathProp)
 				visual.line(this,near,{color:'#00F000'})
 			}
@@ -199,7 +210,17 @@ let healers = []
 export function trySpawnHealer(priority,callback){
 	entrySpawn([MOVE,MOVE,MOVE,HEAL,HEAL,HEAL],priority,creep=>{
 		creep.update = function(){
-			
+			const damaged = cp.creeps.filter(creep=>creep.hits<creep.hitsMax).sort(creep=>creep.hits/creep.hitsMax)
+			//console.log(damaged)
+			if(damaged.length > 0) {
+	            if(this.heal(damaged[0]) == ERR_NOT_IN_RANGE) {
+	                //レンジを適当に投げる
+	                this.rangedHeal(damaged[0])
+	                this.moveTo(damaged[0])
+	            }
+	        }else if(this.pair!=null){
+	        	this.moveTo(this.pair)
+	        }
 	    }
 		callback(creep)
 	})
@@ -258,12 +279,16 @@ export function trySpawnHound(priority,callback){
 			const pathProp = {plainCost:moveTickPlane,swampCost:moveTickSwamp,costMatrix:matrixAttacker}
 
 			//敵位置算出
-			const nearEnemies = ep.soldiers.filter(creep=>getRange(creep,this)<10)
-			let near = this.findClosestByRange(ep.soldiers)
+			const nearEnemies = ep.damageDealer.filter(creep=>getRange(creep,this)<10)
+			let near = this.findClosestByRange(ep.damageDealer)
 
 			//ないなら敵スポーン
 			if(near==null)
 				near = ep.spawn
+
+			nearEnemies.forEach(creep=>{
+				visual.line(this,creep,{color:'#F00000',opacity:0.3,width:0.06})
+			})
 
 			//逃げるか引き撃ちか判定
 			const fullHP = this.hitsMax<this.hits+50
@@ -276,7 +301,7 @@ export function trySpawnHound(priority,callback){
 			}else if(inDanger||!fullHP){
 
 				let rPoint = this.getEscapePos()
-				//console.log("back point ",rPoint)
+				
 
 				let epath = findPath(this, rPoint,pathProp)
 				let nextMove = epath[0]
@@ -286,7 +311,7 @@ export function trySpawnHound(priority,callback){
 					visual.line(prev,epath[i],{color:'#0000F0',opacity:0.2})
 					prev = epath[i]
 				}
-				
+				console.log("back point ",rPoint)
 				this.moveTo(nextMove,pathProp)
 				visual.line(this,rPoint,{color:'#0000F0',lineStyle:'dotted',opacity:0.2})
 			}

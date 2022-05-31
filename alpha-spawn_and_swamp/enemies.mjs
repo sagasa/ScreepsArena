@@ -12,7 +12,6 @@ class creep_profiler{
 		//移動計測用
 		this.lastPos={x:creep.x,y:creep.y}
 		this.lastMoveTick
-
 		this.weight
 	}
 	update(creep){
@@ -61,6 +60,7 @@ export let healers=[]
 export let workers=[]
 export let transporters=[]
 export let soldiers=[]
+export let damageDealer=[]
 
 export let map = new CostMatrix()
 
@@ -110,7 +110,9 @@ export function update(){
     rangedAttackers = creeps.filter(creep=>creep.body.some(b=>b.type==RANGED_ATTACK))
     healers = creeps.filter(creep=>creep.body.some(b=>b.type==HEAL))
 
-    soldiers = creeps.filter(creep=>creep.body.some(b=>b.type==RANGED_ATTACK||b.type==HEAL||b.type==ATTACK))
+    soldiers = attackers.concat(rangedAttackers,healers)
+    damageDealer = attackers.concat(rangedAttackers)
+
     workers = creeps.filter(creep=>creep.body.some(b=>b.type==WORK))
     transporters = creeps.filter(creep=>creep.body.some(b=>b.type==CARRY))
 

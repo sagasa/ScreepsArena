@@ -4,10 +4,10 @@ import {ATTACK,RANGED_ATTACK,HEAL} from '/game/constants';
 import { } from '/arena';
 
 
-export let myCreeps
+export let creeps
 export let ownedStructures
 
 export function update(){
-	myCreeps = getObjectsByPrototype(Creep).filter(creep=>creep.my)
+	creeps = getObjectsByPrototype(Creep).filter(creep=>creep.my)
 	ownedStructures = getObjectsByPrototype(OwnedStructure)
 }

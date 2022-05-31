@@ -78,7 +78,7 @@ export function update(){
             matrixWorker.set(os.x, os.y, 20)
         }
     })
-    cp.myCreeps.forEach(creep=>{
+    cp.creeps.forEach(creep=>{
         matrixWorker.set(creep.x, creep.y, 20)
     })
     constructionSites.forEach(cs=>{
