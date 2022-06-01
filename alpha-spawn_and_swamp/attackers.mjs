@@ -286,9 +286,33 @@ export function trySpawnHound(priority,callback){
 			if(near==null)
 				near = ep.spawn
 
+			let set = new Set([TOP,TOP_RIGHT,RIGHT,BOTTOM_RIGHT,BOTTOM,BOTTOM_LEFT,LEFT,TOP_LEFT])
 			nearEnemies.forEach(creep=>{
 				visual.line(this,creep,{color:'#F00000',opacity:0.3,width:0.06})
+				const dx = creep.x - this.x
+				const dy = creep.y - this.y
+				const sx = Math.abs(dx)
+				const sy = Math.abs(dy)
+				
+				let safeDir
+				
+
+				if(sx==sy){
+
+				}else if(sx<sy){
+					if(dy<0)
+						set.delete([TOP_LEFT,TOP,TOP_RIGHT])
+					else
+						set.delete([BOTTOM_LEFT,BOTTOM,BOTTOM_RIGHT])
+				}else{
+					if(dx<0)
+						set.delete([TOP_LEFT,LEFT,BOTTOM_LEFT])
+					else
+						set.delete([TOP_RIGHT,RIGHT,BOTTOM_RIGHT])
+				}
+				console.log("set ",set)
 			})
+			console.log("set res",set)
 
 			//逃げるか引き撃ちか判定
 			const fullHP = this.hitsMax<this.hits+50

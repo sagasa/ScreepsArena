@@ -163,9 +163,9 @@ class WallData extends MapData{
             this.id2ConvexTotalLength[id] = total
 
             if(length<20)
-                visual.poly(convex.concat(convex[0]),{opacity:0.4,stroke:'#0000F0'})
+                visual.poly(convex.concat(convex[0]),{opacity:0.1,stroke:'#0000F0'})
             else
-                visual.poly(convex.concat(convex[0]),{opacity:0.4,stroke:'#F00000'})
+                visual.poly(convex.concat(convex[0]),{opacity:0.1,stroke:'#F00000'})
             
         }
     }
@@ -301,7 +301,7 @@ class SwampData extends MapData{
 
             const outline = calcInline(id,this.id2AllPos[id][0],this.idMap)
             this.id2Edge[id] = outline
-            visual.poly(outline.concat(outline[0]),{opacity:0.4,stroke:'#0000F0'})
+            visual.poly(outline.concat(outline[0]),{opacity:0.1,stroke:'#0000F0'})
         }
     }
 
