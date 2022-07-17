@@ -6,6 +6,8 @@ import {Visual} from '/game/visual';
 import {CostMatrix,searchPath} from '/game/path-finder';
 import { getObjectsByPrototype,getRange,getTicks } from '/game/utils';
 
+import * as cp from './creeps';
+
 class creep_profiler{
 
 	constructor(creep){
@@ -13,9 +15,13 @@ class creep_profiler{
 		this.lastPos={x:creep.x,y:creep.y}
 		this.lastMoveTick
 		this.weight
+		this.lastNearPos = {}
+		this.targetCreeps = []
 	}
 	update(creep){
-		if(creep.x!=this.lastPos.x||creep.y!=this.lastPos.y){
+
+		const moveLastTick = creep.x!=this.lastPos.x||creep.y!=this.lastPos.y
+		if(moveLastTick){
 			this.lastMoveTick = getTicks()
 			//console.log('move',this.lastMoveTick)
 		}
@@ -42,6 +48,29 @@ class creep_profiler{
 			creep.dangerRadius = 3
 		}
 		
+		//ターゲットの推定
+		//候補
+		const nearCreeps = cp.creeps.filter(c=>getRange(creep,c)<=10)
+		if(moveLastTick&&creep.body.some(b=>b.type==ATTACK||b.type==RANGED_ATTACK)){
+			//攻撃可能&&前tickで動いたなら
+			this.targetCreeps = nearCreeps.filter(c=>{
+				const lastPos = this.lastNearPos[c.id]
+				if(lastPos == null)
+					return false
+				return getRange(creep,lastPos)<getRange(this.lastPos,lastPos)
+			})
+		}
+
+		//ターゲットがあるなら出力
+		if(0<this.targetCreeps.length)
+			console.log(`taget ${creep.id} => ${this.targetCreeps.map(c=>'id:'+c.id)}`)
+
+		//次tick用に登録
+		this.lastNearPos = {}
+		nearCreeps.forEach(c=>this.lastNearPos[c.id]={x:c.x,y:c.y})
+		
+		
+
 		
 
 		//console.log("move tick",this.moveTickSwamp,this.moveTickPlane,this.canMove)
@@ -66,29 +95,9 @@ export let map = new CostMatrix()
 
 let isInit,sideLeft
 
-export let centerArea,enemySpawnArea,mySpawnArea
-
-function rect(x,y,w,h){
-	const rect = {x:x,y:y,w:w,h:h}
-	rect.contain = function(pos){
-		return this.x<=pos.x&&pos.x<=this.x+this.w&&this.y<=pos.y&&pos.y<=this.y+this.h
-	}
-	return rect
-}
-
 function init(){
 	spawn = getObjectsByPrototype(StructureSpawn).find(spawn=>!spawn.my)
-	sideLeft = spawn.x<50
-
-	centerArea = rect(14,0,71,99)
-	if(sideLeft){
-		enemySpawnArea = rect(0,19,13,61)
-		mySpawnArea = rect(86,19,13,61)
-	}else{
-		mySpawnArea = rect(0,19,13,61)
-		enemySpawnArea = rect(86,19,13,61)
-	}
-	
+	sideLeft = spawn.x<50	
 }
 
 export function update(){

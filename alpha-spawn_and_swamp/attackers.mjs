@@ -256,7 +256,7 @@ export function trySpawnKiller(priority,callback){
     	callback(creep)
 	})
 }
-function inSafe(pos){
+function inSafew(pos){
 	if(!hound.hits)
 		return false
 	return ep.soldiers.every(creep=>getRange(creep,hound)+5<getRange(creep,pos))
@@ -278,41 +278,54 @@ export function trySpawnHound(priority,callback){
 			const moveTickPlane = Math.ceil(otherCount/moveCount)
 			const pathProp = {plainCost:moveTickPlane,swampCost:moveTickSwamp,costMatrix:matrixAttacker}
 
+			const ENEMY_SEARCH_RANGE = 10
 			//敵位置算出
-			const nearEnemies = ep.damageDealer.filter(creep=>getRange(creep,this)<10)
+			const nearEnemies = ep.damageDealer.filter(creep=>getRange(creep,this)<ENEMY_SEARCH_RANGE)
 			let near = this.findClosestByRange(ep.damageDealer)
 
 			//ないなら敵スポーン
 			if(near==null)
 				near = ep.spawn
 
-			let set = new Set([TOP,TOP_RIGHT,RIGHT,BOTTOM_RIGHT,BOTTOM,BOTTOM_LEFT,LEFT,TOP_LEFT])
+
+			//向き-1をIndexとする
+			let dirInfo = new Array(8).fill(0)
+			let minDist
+
+
 			nearEnemies.forEach(creep=>{
 				visual.line(this,creep,{color:'#F00000',opacity:0.3,width:0.06})
 				const dx = creep.x - this.x
 				const dy = creep.y - this.y
 				const sx = Math.abs(dx)
 				const sy = Math.abs(dy)
-				
-				let safeDir
-				
 
-				if(sx==sy){
-
-				}else if(sx<sy){
-					if(dy<0)
-						set.delete([TOP_LEFT,TOP,TOP_RIGHT])
-					else
-						set.delete([BOTTOM_LEFT,BOTTOM,BOTTOM_RIGHT])
-				}else{
-					if(dx<0)
-						set.delete([TOP_LEFT,LEFT,BOTTOM_LEFT])
-					else
-						set.delete([TOP_RIGHT,RIGHT,BOTTOM_RIGHT])
+				const set = new Set()
+				if(dx<dy){
+					[BOTTOM,BOTTOM_LEFT,LEFT].forEach(dir=>set.add(dir))
+				}else if(dy<dx){
+					[TOP,TOP_RIGHT,RIGHT].forEach(dir=>set.add(dir))
 				}
-				console.log("set ",set)
+
+				if(dx+dy<0){
+					[LEFT,TOP_LEFT,TOP].forEach(dir=>set.add(dir))
+				}else if(0<dx+dy){
+					[RIGHT,BOTTOM_RIGHT,BOTTOM].forEach(dir=>set.add(dir))
+				}
+				//集計
+				set.forEach(dir=>{
+					const range = getRange(creep,util.move(this,dir))
+					const score = ENEMY_SEARCH_RANGE - range
+					dirInfo[dir-1] += score
+				})
 			})
-			console.log("set res",set)
+			//console.log("dir",dirInfo)
+			for (let i = 0; i < 8; i++) {
+				if(dirInfo[i]!=null){
+					
+					visual.text(dirInfo[i],util.move(this,i+1),{font:0.4})
+				}
+			}
 
 			//逃げるか引き撃ちか判定
 			const fullHP = this.hitsMax<this.hits+50
@@ -323,19 +336,39 @@ export function trySpawnHound(priority,callback){
 				this.moveTo(near,pathProp)
 				visual.line(this,near)
 			}else if(inDanger||!fullHP){
+				let dir = null
+				let minIndex = null
+				for (let i = 0; i < 8; i++) {
+
+					const rayInfo = mp.wallInfo.rayCast(this,i+1,10)
+
+
+					const p = util.sum(this,util.mul(util.toVec(i+1),rayInfo.range))
+					if(rayInfo.hit)
+						visual.line(this,p,{color:'#F0F000',opacity:0.3,width:0.06})
+
+					if(dirInfo[i]==null&&getTerrainAt(util.move(this,i+1))!=TERRAIN_WALL){
+
+						if(minIndex==null)
+							minIndex=i
+						if(dir==null)
+							dir = i
+						if(minIndex+4<i){
+							dir = i
+							minIndex = i
+						}
+					}
+				}
+				//this.move(dir+1)
 
 				let rPoint = this.getEscapePos()
-				
+				console.log("back point ",rPoint)
 
 				let epath = findPath(this, rPoint,pathProp)
 				let nextMove = epath[0]
 				
-				let prev = this
-				for (var i = 0; i < epath.length&&i<5; i++) {
-					visual.line(prev,epath[i],{color:'#0000F0',opacity:0.2})
-					prev = epath[i]
-				}
-				console.log("back point ",rPoint)
+				visual.poly(epath,{color:'#0000F0',opacity:0.2})
+				
 				this.moveTo(nextMove,pathProp)
 				visual.line(this,rPoint,{color:'#0000F0',lineStyle:'dotted',opacity:0.2})
 			}
@@ -346,6 +379,11 @@ export function trySpawnHound(priority,callback){
 	    }
 
  		creep.getEscapePos = calcEscapePos
+
+ 		creep.onEnterCenter = function(){
+ 			this.currentShield=null
+ 			console.log("clear currentShield cuz enter")
+ 		}
 
 	    creep.autoAttack = function(target){
 	    	if(target==null)
@@ -359,7 +397,6 @@ export function trySpawnHound(priority,callback){
 		callback(creep)
 	})
 }
-
 
 
 //逃走経路算出creepをthisとする
@@ -391,7 +428,7 @@ let calcEscapePos = function(){
 		console.log("calc next shield")
 		let minScore = 200
 		let minId
-		mp.wallInfo.bigIds.forEach(id=>{
+		mp.wallInfo.Id4Attack.forEach(id=>{
 			const pos = mp.wallInfo.id2Center[id]
 
 			//危険度のスコア化
@@ -418,9 +455,9 @@ let calcEscapePos = function(){
 			//console.log("enemyCount id",id,"score",total,"enemy",enemyScore,"range",getRange(this,pos))
 
 			
-			pos.y -= 1
-			visual.circle(pos,{radius:0.2,opacity:0.4,fill:'#00F000'})
-			visual.text(score,pos,{font:0.4})
+			const view = util.sum(pos,{x:0,y:-1})
+			visual.circle(view,{radius:0.2,opacity:0.4,fill:'#00F000'})
+			visual.text(score,view,{font:0.4})
 
 			if(score<minScore){
 				minScore = score

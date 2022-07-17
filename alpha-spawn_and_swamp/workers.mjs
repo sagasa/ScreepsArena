@@ -92,7 +92,7 @@ export function update(){
         const priority = 10
         trySpawnEnergyTransporter(priority,(creep)=>energyTransporters.push(creep))
     }
-   // pf.lap('ET','#80FF00')
+    // pf.lap('ET','#80FF00')
     energyCollectors = energyCollectors.filter(creep=>creep.hitsMax)
     energyCollectors.forEach(et=>et.update())
     if(energyCollectors.length<2){
@@ -260,6 +260,9 @@ export function trySpawnEnergyCollector(priority,callback){
         creep.extensions = []
         creep.conflict = false
 
+        creep.onDeath = function(){
+            this.constructions.forEach(cs=>cs.remove())
+        }
 
         creep.update = function(){
            

@@ -229,6 +229,38 @@ export function rotate90(vec,dest){
     return dest
 }
 
+//向きから座標
+export function toVec(direction,dest){
+    const pos = dest==null?{x:0,y:0}:dest
+    const dir = (direction+7)%8 + 1
+    if(dir==TOP_LEFT)
+        return {x:pos.x-1,y:pos.y-1}
+    if(dir==TOP)
+        return {x:pos.x,y:pos.y-1}
+    if(dir==TOP_RIGHT)
+        return {x:pos.x+1,y:pos.y-1}
+    if(dir==LEFT)
+        return {x:pos.x-1,y:pos.y}
+    if(dir==RIGHT)
+        return {x:pos.x+1,y:pos.y}
+    if(dir==BOTTOM_LEFT)
+        return {x:pos.x-1,y:pos.y+1}
+    if(dir==BOTTOM)
+        return {x:pos.x,y:pos.y+1}
+    if(dir==BOTTOM_RIGHT)
+        return {x:pos.x+1,y:pos.y+1}
+    console.log("not dir ",dir)
+    return pos
+}
+
+export function mul(v0,s,dest){
+    if(dest==null)
+        return {x:v0.x*s,y:v0.y*s}
+    dest.x = v0.x*s
+    dest.y = v0.y*s
+    return dest
+}
+
 export function sum(v0,v1,dest){
     if(dest==null)
         return {x:v0.x+v1.x,y:v0.y+v1.y}

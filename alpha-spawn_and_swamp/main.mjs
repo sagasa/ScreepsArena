@@ -37,9 +37,10 @@ export function loop() {
     pf.lap('updateInfo','#FF8000')
 
     workers.update()
+    pf.lap('updateWorkers','#00F000')
     attackers.update()
     
-    pf.lap('updateAattackers','#F00000')    
+    pf.lap('updateAattackers','#F00000')
 
     trySpawn()
     

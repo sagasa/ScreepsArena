@@ -16,7 +16,19 @@ class MapData{
         this.idMap
         //構成するすべてのPosを格納してある
         this.id2AllPos = []
-    }    
+    }
+
+    rayCast(start,dir,length){
+        const vec = util.toVec(dir)
+        const pos = util.sum(start,vec)
+        for (let i = 1; i < length; i++) {
+            const id = this.idMap.get(pos.x,pos.y)
+            if(id!=0)
+                return {id:id,range:i,hit:true}
+            util.sum(pos,vec,pos)
+        }
+        return {id:0,range:0,hit:false}
+    }
 
     //idMap + id2AllPos
     makeIdMap(func){
@@ -111,6 +123,75 @@ class WallData extends MapData{
         visual.clear()
         this.makeIdMap()
 
+
+        {
+            console.log("calcOutline")
+
+            const id = 1
+
+            let y = 0
+            while(getTerrainAt({x:13,y:y})==TERRAIN_WALL)
+                y++
+
+            let start = {x:13,y:y}
+            const map = this.idMap
+
+            //外周探索
+            //初めの座標 の1上
+            let orgPos = util.move(start,TOP)
+                 
+            let pos = orgPos
+            const outline = [orgPos]
+            let lastDir = LEFT
+
+            out_loop:
+            while(true) {
+
+                in_loop:
+                //let i = 10; 2 < i; i--
+                for(let i = 6; i < 14; i++) {
+                    let tmp = util.move(pos,lastDir+i)
+                    if(map.get(tmp.x,tmp.y)==id){
+                        //末端なら
+                        if(tmp.x==orgPos.x&&tmp.y==orgPos.y){
+                            break out_loop
+                        }
+
+                        outline.push(tmp)
+                                
+                        pos = tmp
+                        lastDir += i
+                        break in_loop
+                    }
+                }
+            }
+
+            //visual.poly(outline.concat(outline[0]),{opacity:0.2,stroke:'#F00000'})
+
+            console.log("calcConvex")
+            //凸型抽出
+            orgPos = outline[0]
+            //outline.sort((a,b)=>compare(orgPos,a,b))
+
+            
+
+            const convex = [orgPos]
+            outline.forEach((p,i)=>{
+                const next = outline[(outline.length + i + 1) % outline.length]
+                const prev = outline[(outline.length + i - 1) % outline.length]
+
+                const cross = util.cross3(p,prev,next)
+                if(cross<0){
+                    //visual.text(cross,p,{font:0.4})
+                    //visual.circle(p,{radius:0.2,opacity:0.4,fill:'#F00000'})
+                }else if(0<cross){
+                    //visual.circle(p,{radius:0.2,opacity:0.4,fill:'#0000F0'})
+                }
+            })
+            //convex.pop()
+            //visual.poly(convex.concat(convex[0]),{opacity:0.2,stroke:'#0000F0'})
+        }
+
         //外周以外
         for(let id = 2; id < this.id2AllPos.length; id++) {
              
@@ -139,11 +220,20 @@ class WallData extends MapData{
             visual.text(id,center,{font:0.4})
 
             //IDリスト登録
-            if(20<length&&length<200&&center.x<85&&14<center.x)
-                this.bigIds.push(id)
+            if(length<200&&center.x<85&&14<center.x){
+                if(20<length){
+                    this.bigIds.push(id)
+                    this.Id4RangedAttack.push(id)
+                }
+                if(7<length)
+                    this.Id4Attack.push(id)
+            }
+            
+
             this.allIds.push(id)
 
             const outline = calcOutline(id,this.id2AllPos[id][0],this.idMap)
+
 
             const convex = calcConvex(outline)
 
@@ -330,12 +420,31 @@ class SwampData extends MapData{
 export let wallInfo = new WallData()
 export let swampInfo = new SwampData()
 
+function rect(x,y,w,h){
+    const rect = {x:x,y:y,w:w,h:h}
+    rect.contain = function(pos){
+        return this.x<=pos.x&&pos.x<=this.x+this.w&&this.y<=pos.y&&pos.y<=this.y+this.h
+    }
+    return rect
+}
+
+export let centerArea,enemySpawnArea,mySpawnArea
+
 let isInit = false
 
 export function update(){
     if(isInit)
         return
     isInit = true
+
+    centerArea = rect(14,0,71,99)
+    if(50<cp.spawn.x){
+        enemySpawnArea = rect(0,19,13,61)
+        mySpawnArea = rect(86,19,13,61)
+    }else{
+        mySpawnArea = rect(0,19,13,61)
+        enemySpawnArea = rect(86,19,13,61)
+    }
 
     wallInfo.update()
     swampInfo.update()
