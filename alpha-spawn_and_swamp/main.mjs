@@ -7,18 +7,18 @@ import {CostMatrix,searchPath} from '/game/path-finder';
 
 import {spawn_holder} from './utils';
 import {canMove,check3x3,move,getDirection4,clamp1,entrySpawn,trySpawn} from './utils';
-import * as ep from './enemies';
-import * as cp from './creeps';
-import * as workers from './workers';
-import * as attackers from './attackers';
-import * as maps from './maps';
-import * as pf from './profiler';
+import * as ep from './info/enemies';
+import * as cp from './info/creeps';
+import * as workers from './creeps/workers';
+import * as attackers from './creeps/attackers';
+import * as maps from './info/maps';
+import * as pf from './info/profiler';
 
 
 let isInit
 
-export function init(){
 
+export function init(){
 
 }
 

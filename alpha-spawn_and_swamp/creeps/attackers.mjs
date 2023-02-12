@@ -6,14 +6,14 @@ import { } from '/arena';
 import {CostMatrix,searchPath} from '/game/path-finder';
 import {Visual} from '/game/visual';
 
-import {spawn_holder} from './utils';
-import {check3x3,move,getDirection4,clamp1,entrySpawn} from './utils';
-import * as util from './utils';
+import {spawn_holder} from '../utils';
+import {check3x3,move,getDirection4,clamp1,entrySpawn} from '../utils';
+import * as util from '../utils';
 
-import * as ep from './enemies';
-import * as cp from './creeps';
-import * as mp from './maps';
-import * as pf from './profiler';
+import * as ep from '../info/enemies';
+import * as cp from '../info/creeps';
+import * as mp from '../info/maps';
+import * as pf from '../info/profiler';
 
 let groupPoint ,isInit
 
@@ -73,12 +73,12 @@ export function update(){
     healers.forEach(et=>et.update())
     rangedAttackers.forEach(et=>et.update())
 
-    if(healers.length<0){
+    if(healers.length<2){
         const priority = 3.98-healers.length*0.05
         trySpawnHealer(priority,(creep)=>healers.push(creep))
     }
     
-    if(rangedAttackers.length<0){
+    if(rangedAttackers.length<4){
         const priority = 4-rangedAttackers.length*0.05
         trySpawnRangedAttacker(priority,(creep)=>rangedAttackers.push(creep))
     }
@@ -231,8 +231,8 @@ export function trySpawnKiller(priority,callback){
 	entrySpawn([MOVE,MOVE,MOVE,MOVE,MOVE,ATTACK,ATTACK],priority,creep=>{
 
 		creep.update = function(){
-			let workers = ep.workers.filter(creep=>ep.centerArea.contain(creep)&&inSafe(creep))
-			let transporters = ep.transporters.filter(creep=>ep.centerArea.contain(creep)&&inSafe(creep))
+			let workers = ep.workers.filter(creep=>mp.centerArea.contain(creep)&&inSafe(creep))
+			let transporters = ep.transporters.filter(creep=>mp.centerArea.contain(creep)&&inSafe(creep))
 			let extensions = ep.extensions.filter(ext=>inSafe(ext))
 
 			let near = findClosestByRange(this,workers)
@@ -256,7 +256,7 @@ export function trySpawnKiller(priority,callback){
     	callback(creep)
 	})
 }
-function inSafew(pos){
+function inSafe(pos){
 	if(!hound.hits)
 		return false
 	return ep.soldiers.every(creep=>getRange(creep,hound)+5<getRange(creep,pos))

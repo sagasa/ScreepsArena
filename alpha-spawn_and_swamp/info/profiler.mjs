@@ -1,7 +1,8 @@
 import {arenaInfo} from 'game';
 import {getCpuTime,getTicks} from 'game/utils';
 import {Visual} from '/game/visual';
-import * as util from './utils';
+
+import * as util from '../utils';
 
 /*
 == 使い方 ==

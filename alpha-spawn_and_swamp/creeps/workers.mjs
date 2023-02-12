@@ -4,13 +4,15 @@ import {MOVE,ERR_NOT_ENOUGH_ENERGY ,RESOURCE_ENERGY,ERR_NOT_IN_RANGE,CARRY,ATTAC
 import {TOP,TOP_RIGHT,RIGHT,BOTTOM_RIGHT,BOTTOM,BOTTOM_LEFT,LEFT,TOP_LEFT} from '/game/constants';
 import { } from '/arena';
 import {CostMatrix,searchPath} from '/game/path-finder';
-
-import {canMove,check3x3,move,getDirection4,clamp1,getMin,entrySpawn} from './utils';
-import * as ep from './enemies';
-import * as cp from './creeps';
-import * as util from './utils';
 import {Visual} from '/game/visual';
-import * as pf from './profiler';
+
+
+import {canMove,check3x3,move,getDirection4,clamp1,getMin,entrySpawn} from '../utils';
+import * as ep from '../info/enemies';
+import * as cp from '../info/creeps';
+import * as util from '../utils';
+
+import * as pf from '../info/profiler';
 
 let DEBUG = false
 
